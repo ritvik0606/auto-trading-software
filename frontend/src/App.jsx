@@ -15,6 +15,13 @@ const PerformancePage = lazy(() => import("./pages/PerformancePage"));
 const AIInsightsPage = lazy(() => import("./pages/AIInsightsPage"));
 const MobileControlPage = lazy(() => import("./pages/MobileControlPage"));
 const MarketWatchPage = lazy(() => import("./pages/MarketWatchPage"));
+const BrokerManagementPage = lazy(
+  () => import("./pages/BrokerManagementPage")
+);
+const HoldingsPage = lazy(() => import("./pages/HoldingsPage"));
+const FundsPage = lazy(() => import("./pages/FundsPage"));
+const OrderBookPage = lazy(() => import("./pages/OrderBookPage"));
+const TradeBookPage = lazy(() => import("./pages/TradeBookPage"));
 
 export default function App() {
   return (
@@ -24,9 +31,14 @@ export default function App() {
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/market-watch" element={<MarketWatchPage />} />
+          <Route path="/brokers" element={<BrokerManagementPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
+          <Route path="/holdings" element={<HoldingsPage />} />
+          <Route path="/funds" element={<FundsPage />} />
           <Route path="/positions" element={<PositionsPage />} />
           <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/order-book" element={<OrderBookPage />} />
+          <Route path="/trade-book" element={<TradeBookPage />} />
           <Route path="/strategies" element={<StrategiesPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/risk" element={<RiskPage />} />

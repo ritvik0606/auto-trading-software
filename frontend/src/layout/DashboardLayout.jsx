@@ -19,9 +19,14 @@ const drawerWidth = 252;
 const navigation = [
   ["Dashboard", "/dashboard", "DB"],
   ["Market Watch", "/market-watch", "MW"],
+  ["Brokers", "/brokers", "BR"],
   ["Portfolio", "/portfolio", "PF"],
+  ["Holdings", "/holdings", "HD"],
+  ["Funds", "/funds", "FD"],
   ["Positions", "/positions", "PS"],
   ["Orders", "/orders", "OR"],
+  ["Order Book", "/order-book", "OB"],
+  ["Trade Book", "/trade-book", "TB"],
   ["Strategies", "/strategies", "ST"],
   ["Watchlist", "/watchlist", "WL"],
   ["Risk Dashboard", "/risk", "RK"],
@@ -60,7 +65,7 @@ function Sidebar({ onNavigate }) {
         </Box>
       </Box>
       <Divider />
-      <List sx={{ px: 1.5, py: 2, flex: 1 }}>
+      <List sx={{ px: 1.5, py: 2, flex: 1, overflowY: "auto" }}>
         {navigation.map(([label, path, marker]) => (
           <ListItemButton
             key={path}
@@ -136,13 +141,13 @@ export default function DashboardLayout() {
           borderColor: "divider",
         }}
       >
-        <Toolbar sx={{ gap: 2 }}>
+        <Toolbar sx={{ gap: { xs: 1, sm: 2 } }}>
           <IconButton
             color="inherit"
             onClick={() => setMobileOpen(true)}
             sx={{ display: { md: "none" } }}
           >
-            <Typography fontWeight={900}>MENU</Typography>
+            <Typography fontWeight={900} fontSize={12}>MENU</Typography>
           </IconButton>
           <Typography fontWeight={700} sx={{ flex: 1 }}>
             {title}
@@ -154,7 +159,15 @@ export default function DashboardLayout() {
             variant="outlined"
             sx={{ display: { xs: "none", sm: "flex" } }}
           />
-          <Avatar sx={{ width: 34, height: 34, bgcolor: "secondary.main", fontSize: 13 }}>
+          <Avatar
+            sx={{
+              width: 34,
+              height: 34,
+              bgcolor: "secondary.main",
+              fontSize: 13,
+              display: { xs: "none", sm: "flex" },
+            }}
+          >
             RT
           </Avatar>
         </Toolbar>

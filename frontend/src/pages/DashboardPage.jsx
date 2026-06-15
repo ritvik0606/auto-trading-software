@@ -1,4 +1,5 @@
-import { Grid, Box, Chip, Typography } from "@mui/material";
+import { Box, Button, Chip, Grid, Typography } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import { getDataSafe, visibleError } from "../services/api";
 import useApi from "../hooks/useApi";
 import Loading from "../components/Loading";
@@ -8,7 +9,8 @@ import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import OfflineNotice from "../components/OfflineNotice";
 import LivePortfolioPanel from "../components/LivePortfolioPanel";
-import { money, pnlTone } from "../utils/format";
+import DataTable from "../components/DataTable";
+import { dateTime, money, pnlTone } from "../utils/format";
 
 const fallbackSummary = {
   capital: 100000,
@@ -20,6 +22,7 @@ const fallbackSummary = {
 };
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { data, loading, error, reload } = useApi(async () => {
     const [
       summary,
@@ -32,6 +35,9 @@ export default function DashboardPage() {
       bankNifty,
       reliance,
       activeStrategies,
+      failover,
+      orders,
+      paperTrades,
     ] =
       await Promise.all([
         getDataSafe("/api/dashboard/summary", null),
@@ -53,6 +59,13 @@ export default function DashboardPage() {
           ltp: null,
         }),
         getDataSafe("/api/strategy/active", []),
+        getDataSafe("/api/broker-failover/status", {
+          activeBroker: "ANGEL_ONE",
+          health: "UNAVAILABLE",
+          mode: "PAPER_ONLY",
+        }),
+        getDataSafe("/api/orders/all", []),
+        getDataSafe("/api/paper-trade/all", []),
       ]);
     const openPositions = Array.isArray(positions.data)
       ? positions.data.filter((position) => position.status === "OPEN").length
@@ -92,6 +105,11 @@ export default function DashboardPage() {
         reliance: reliance.data,
       },
       activeStrategies: activeStrategies.data,
+      failover: failover.data,
+      recentOrders: Array.isArray(orders.data) ? orders.data.slice(0, 5) : [],
+      recentTrades: Array.isArray(paperTrades.data)
+        ? paperTrades.data.slice(0, 5)
+        : [],
       brokerUnavailable: broker.unavailable,
       marketUnavailable:
         nifty.unavailable ||
@@ -103,7 +121,9 @@ export default function DashboardPage() {
         risk.unavailable ||
         positions.unavailable ||
         performance.unavailable ||
-        activeStrategies.unavailable,
+        activeStrategies.unavailable ||
+        orders.unavailable ||
+        paperTrades.unavailable,
       partialError: visibleError(
         summary,
         broker,
@@ -114,7 +134,10 @@ export default function DashboardPage() {
         nifty,
         bankNifty,
         reliance,
-        activeStrategies
+        activeStrategies,
+        failover,
+        orders,
+        paperTrades
       ),
     };
   }, []);
@@ -126,6 +149,12 @@ export default function DashboardPage() {
   const activeStrategies = Array.isArray(data?.activeStrategies)
     ? data.activeStrategies
     : [];
+  const recentOrders = data?.recentOrders || [];
+  const recentTrades = data?.recentTrades || [];
+  const activeBroker =
+    data?.failover?.activeBroker === "PAYTM_MONEY"
+      ? "Paytm Money"
+      : "Angel One";
   const showOffline =
     !connected ||
     data?.brokerUnavailable ||
@@ -193,6 +222,7 @@ export default function DashboardPage() {
             {[
               ["Backend API", "Online", "success.main"],
               ["Broker session", connected ? "Connected" : "Disconnected", connected ? "success.main" : "error.main"],
+              ["Active broker", activeBroker, "primary.main"],
               ["Execution", "Paper only", "warning.main"],
             ].map(([label, value, color]) => (
               <Box key={label} display="flex" justifyContent="space-between" py={1.25}>
@@ -200,6 +230,24 @@ export default function DashboardPage() {
                 <Typography fontWeight={700} color={color}>{value}</Typography>
               </Box>
             ))}
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12 }}>
+          <SectionCard title="Quick actions" subtitle="Trading terminal shortcuts">
+            <Box display="flex" flexWrap="wrap" gap={1.5}>
+              <Button variant="contained" onClick={() => navigate("/orders")}>
+                Go to Orders
+              </Button>
+              <Button variant="outlined" onClick={() => navigate("/strategies")}>
+                Go to Strategies
+              </Button>
+              <Button variant="outlined" onClick={() => navigate("/market-watch")}>
+                Go to Market Watch
+              </Button>
+              <Button variant="outlined" onClick={() => navigate("/brokers")}>
+                Go to Brokers
+              </Button>
+            </Box>
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12 }}>
@@ -261,6 +309,61 @@ export default function DashboardPage() {
                 </Box>
               ))
             )}
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12, xl: 6 }}>
+          <SectionCard title="Recent orders" subtitle="Latest broker safety-layer requests">
+            <DataTable
+              rows={recentOrders}
+              emptyMessage="No recent orders"
+              columns={[
+                { key: "symbol", label: "Symbol" },
+                { key: "side", label: "Side" },
+                { key: "quantity", label: "Qty", align: "right" },
+                {
+                  key: "status",
+                  label: "Status",
+                  render: (row) => (
+                    <Chip
+                      size="small"
+                      label={row.status}
+                      color={row.status === "BLOCKED" ? "warning" : "success"}
+                    />
+                  ),
+                },
+                { key: "createdAt", label: "Time", render: (row) => dateTime(row.createdAt) },
+              ]}
+            />
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12, xl: 6 }}>
+          <SectionCard title="Recent trades" subtitle="Latest paper execution activity">
+            <DataTable
+              rows={recentTrades}
+              emptyMessage="No recent paper trades"
+              columns={[
+                { key: "symbol", label: "Symbol" },
+                { key: "tradeType", label: "Side" },
+                { key: "quantity", label: "Qty", align: "right" },
+                {
+                  key: "pnl",
+                  label: "P&L",
+                  align: "right",
+                  render: (row) => money(row.pnl),
+                },
+                {
+                  key: "status",
+                  label: "Status",
+                  render: (row) => (
+                    <Chip
+                      size="small"
+                      label={row.status}
+                      color={row.status === "OPEN" ? "warning" : "default"}
+                    />
+                  ),
+                },
+              ]}
+            />
           </SectionCard>
         </Grid>
       </Grid>
