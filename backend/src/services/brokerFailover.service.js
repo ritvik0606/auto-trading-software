@@ -1,6 +1,7 @@
-const axios = require("axios");
 const pool = require("../config/db");
-const { loginAngel } = require("./angel.service");
+const {
+  getBrokerStatus: getSessionStatus,
+} = require("./brokerSession.service");
 
 const PRIMARY_BROKER = "ANGEL_ONE";
 const SECONDARY_BROKER = "PAYTM_MONEY";
@@ -8,7 +9,6 @@ const SUPPORTED_BROKERS = new Set([
   PRIMARY_BROKER,
   SECONDARY_BROKER,
 ]);
-const HEALTH_TIMEOUT_MS = 10000;
 const MONITOR_INTERVAL_MS = 5 * 60 * 1000;
 
 let activeBroker = PRIMARY_BROKER;
@@ -47,14 +47,6 @@ function round(value) {
   return Number(Number(value).toFixed(2));
 }
 
-function safeFailureMessage(error) {
-  return (
-    error.response?.data?.message ||
-    error.message ||
-    "Broker health check failed"
-  );
-}
-
 function recordHealthMetric(broker, result) {
   const metric = healthMetrics[broker];
   metric.checks += 1;
@@ -71,116 +63,37 @@ function recordHealthMetric(broker, result) {
 
 async function checkAngelHealth() {
   const startedAt = Date.now();
-  let result;
-
-  try {
-    const login = await loginAngel();
-    const sessionValid = Boolean(login.data?.jwtToken);
-    result = {
-      broker: PRIMARY_BROKER,
-      healthy: sessionValid,
-      apiAvailable: true,
-      sessionValid,
-      latencyMs: Date.now() - startedAt,
-      checkedAt: new Date().toISOString(),
-      reason: sessionValid
-        ? null
-        : "Angel One login did not return a valid session",
-    };
-  } catch (error) {
-    result = {
-      broker: PRIMARY_BROKER,
-      healthy: false,
-      apiAvailable: Boolean(error.response),
-      sessionValid: false,
-      latencyMs: Date.now() - startedAt,
-      checkedAt: new Date().toISOString(),
-      reason: safeFailureMessage(error),
-    };
-  }
+  const status = getSessionStatus(PRIMARY_BROKER);
+  const result = {
+    broker: PRIMARY_BROKER,
+    healthy: status.connected,
+    apiAvailable: status.configured,
+    sessionValid: status.sessionValid,
+    latencyMs: status.latencyMs ?? Date.now() - startedAt,
+    checkedAt: new Date().toISOString(),
+    reason: status.connected
+      ? null
+      : status.reason || "Angel One session is not connected",
+  };
 
   recordHealthMetric(PRIMARY_BROKER, result);
   return result;
 }
 
-function getPaytmConfiguration() {
-  const missing = [
-    "PAYTM_API_KEY",
-    "PAYTM_API_SECRET",
-    "PAYTM_ACCESS_TOKEN",
-  ].filter((name) => !process.env[name]?.trim());
-
-  return {
-    configured: missing.length === 0,
-    missing,
-    healthUrl: process.env.PAYTM_HEALTH_URL?.trim() || null,
-  };
-}
-
 async function checkPaytmHealth() {
   const startedAt = Date.now();
-  const config = getPaytmConfiguration();
-  let result;
-
-  if (!config.configured) {
-    result = {
-      broker: SECONDARY_BROKER,
-      healthy: false,
-      apiAvailable: false,
-      sessionValid: false,
-      latencyMs: Date.now() - startedAt,
-      checkedAt: new Date().toISOString(),
-      reason:
-        `Missing Paytm Money configuration: ${config.missing.join(", ")}`,
-    };
-  } else if (!config.healthUrl) {
-    result = {
-      broker: SECONDARY_BROKER,
-      healthy: false,
-      apiAvailable: false,
-      sessionValid: false,
-      latencyMs: Date.now() - startedAt,
-      checkedAt: new Date().toISOString(),
-      reason:
-        "PAYTM_HEALTH_URL is required to verify Paytm Money connectivity",
-    };
-  } else {
-    try {
-      const response = await axios.get(config.healthUrl, {
-        timeout: HEALTH_TIMEOUT_MS,
-        headers: {
-          Authorization: `Bearer ${process.env.PAYTM_ACCESS_TOKEN.trim()}`,
-          "x-api-key": process.env.PAYTM_API_KEY.trim(),
-          Accept: "application/json",
-        },
-      });
-      const sessionValid =
-        response.status >= 200 &&
-        response.status < 300 &&
-        response.data?.status !== false;
-      result = {
-        broker: SECONDARY_BROKER,
-        healthy: sessionValid,
-        apiAvailable: true,
-        sessionValid,
-        latencyMs: Date.now() - startedAt,
-        checkedAt: new Date().toISOString(),
-        reason: sessionValid
-          ? null
-          : "Paytm Money health endpoint rejected the session",
-      };
-    } catch (error) {
-      result = {
-        broker: SECONDARY_BROKER,
-        healthy: false,
-        apiAvailable: Boolean(error.response),
-        sessionValid: false,
-        latencyMs: Date.now() - startedAt,
-        checkedAt: new Date().toISOString(),
-        reason: safeFailureMessage(error),
-      };
-    }
-  }
+  const sessionStatus = getSessionStatus(SECONDARY_BROKER);
+  const result = {
+    broker: SECONDARY_BROKER,
+    healthy: sessionStatus.connected,
+    apiAvailable: sessionStatus.configured,
+    sessionValid: sessionStatus.sessionValid,
+    latencyMs: sessionStatus.latencyMs ?? Date.now() - startedAt,
+    checkedAt: new Date().toISOString(),
+    reason: sessionStatus.connected
+      ? null
+      : sessionStatus.reason || "Paytm Money session is not connected",
+  };
 
   recordHealthMetric(SECONDARY_BROKER, result);
   return result;

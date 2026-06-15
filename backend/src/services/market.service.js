@@ -1,5 +1,9 @@
 const axios = require("axios");
-const { loginAngel } = require("./angel.service");
+const {
+  connectAngel,
+  getBrokerSession,
+  invalidateBrokerSession,
+} = require("./brokerSession.service");
 
 const ANGEL_BASE_URL = "https://apiconnect.angelone.in";
 const ANGEL_LTP_URL =
@@ -8,12 +12,7 @@ const ANGEL_SEARCH_URL =
   `${ANGEL_BASE_URL}/rest/secure/angelbroking/order/v1/searchScrip`;
 const ANGEL_CANDLE_URL =
   `${ANGEL_BASE_URL}/rest/secure/angelbroking/historical/v1/getCandleData`;
-const SESSION_TTL_MS = 10 * 60 * 1000;
-
-let cachedSession;
-let sessionExpiresAt = 0;
-let sessionPromise;
-
+const MARKET_REQUEST_TIMEOUT_MS = 10000;
 const INDEX_SYMBOLS = {
   NIFTY: {
     exchange: "NSE",
@@ -36,29 +35,26 @@ class MarketDataError extends Error {
 }
 
 async function getAngelSession() {
-  if (cachedSession && Date.now() < sessionExpiresAt) {
-    return cachedSession;
+  try {
+    return getBrokerSession("ANGEL_ONE");
+  } catch (error) {
+    if (error.statusCode === 423) {
+      throw new MarketDataError(
+        "Angel One session is disconnected. Connect the broker first.",
+        503
+      );
+    }
+    await connectAngel();
+    return getBrokerSession("ANGEL_ONE");
   }
-
-  if (!sessionPromise) {
-    sessionPromise = loginAngel()
-      .then((login) => {
-        cachedSession = login.data;
-        sessionExpiresAt = Date.now() + SESSION_TTL_MS;
-        return cachedSession;
-      })
-      .finally(() => {
-        sessionPromise = undefined;
-      });
-  }
-
-  return sessionPromise;
 }
 
 function clearAngelSession(error) {
   if ([401, 403].includes(error.response?.status)) {
-    cachedSession = undefined;
-    sessionExpiresAt = 0;
+    invalidateBrokerSession(
+      "ANGEL_ONE",
+      "Angel One rejected the stored session"
+    );
   }
 }
 
@@ -125,7 +121,7 @@ async function getLTP(exchange, tradingSymbol, symbolToken, headers) {
         tradingsymbol: tradingSymbol,
         symboltoken: symbolToken,
       },
-      { headers: angelHeaders }
+      { headers: angelHeaders, timeout: MARKET_REQUEST_TIMEOUT_MS }
     );
 
     if (response.data?.status !== true) {
@@ -159,7 +155,7 @@ async function searchNseSymbol(symbol, headers) {
         exchange: "NSE",
         searchscrip: symbol,
       },
-      { headers }
+      { headers, timeout: MARKET_REQUEST_TIMEOUT_MS }
     );
 
     if (response.data?.status !== true) {
@@ -206,11 +202,21 @@ async function searchNseSymbol(symbol, headers) {
 
 async function getNiftyLTP() {
   const index = INDEX_SYMBOLS.NIFTY;
+  const liveQuote =
+    require("./angelWebSocket.service").getLiveQuote("NIFTY");
+  if (liveQuote) {
+    return liveQuote;
+  }
   return getLTP(index.exchange, index.tradingSymbol, index.symbolToken);
 }
 
 async function getBankNiftyLTP() {
   const index = INDEX_SYMBOLS.BANKNIFTY;
+  const liveQuote =
+    require("./angelWebSocket.service").getLiveQuote("BANKNIFTY");
+  if (liveQuote) {
+    return liveQuote;
+  }
   return getLTP(index.exchange, index.tradingSymbol, index.symbolToken);
 }
 
@@ -223,6 +229,12 @@ async function getSymbolQuote(symbol) {
 
   if (!/^[A-Z0-9&.-]+$/.test(normalizedSymbol)) {
     throw new MarketDataError("Symbol contains unsupported characters", 400);
+  }
+
+  const liveQuote =
+    require("./angelWebSocket.service").getLiveQuote(normalizedSymbol);
+  if (liveQuote) {
+    return liveQuote;
   }
 
   const index = INDEX_SYMBOLS[normalizedSymbol];
@@ -239,6 +251,29 @@ async function getSymbolQuote(symbol) {
     instrument.symbolToken,
     headers
   );
+}
+
+async function resolveNseInstrument(symbol) {
+  const normalizedSymbol = symbol?.trim().toUpperCase();
+
+  if (!normalizedSymbol || !/^[A-Z0-9&.-]+$/.test(normalizedSymbol)) {
+    throw new MarketDataError("Symbol is invalid", 400);
+  }
+
+  const index = INDEX_SYMBOLS[normalizedSymbol];
+  if (index) {
+    return {
+      symbol: normalizedSymbol,
+      ...index,
+    };
+  }
+
+  const headers = await getAngelHeaders();
+  const instrument = await searchNseSymbol(normalizedSymbol, headers);
+  return {
+    symbol: normalizedSymbol,
+    ...instrument,
+  };
 }
 
 function formatAngelDate(date) {
@@ -295,7 +330,7 @@ async function getHistoricalCloses(symbol, requestedDays = 100) {
         fromdate: formatAngelDate(fromDate),
         todate: formatAngelDate(toDate),
       },
-      { headers }
+      { headers, timeout: MARKET_REQUEST_TIMEOUT_MS }
     );
 
     if (response.data?.status !== true) {
@@ -339,4 +374,5 @@ module.exports = {
   getBankNiftyLTP,
   getSymbolQuote,
   getHistoricalCloses,
+  resolveNseInstrument,
 };

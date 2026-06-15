@@ -9,14 +9,17 @@ const REQUIRED_ENV_VARS = [
   "ANGEL_PIN",
   "ANGEL_TOTP_SECRET",
 ];
+const LOGIN_TIMEOUT_MS = 10000;
 
 const getAngelCredentials = () => {
   const missing = REQUIRED_ENV_VARS.filter((name) => !process.env[name]?.trim());
 
   if (missing.length > 0) {
-    throw new Error(
+    const error = new Error(
       `Missing required Angel One environment variables: ${missing.join(", ")}`
     );
+    error.statusCode = 503;
+    throw error;
   }
 
   return {
@@ -55,6 +58,7 @@ const loginAngel = async () => {
         totp,
       },
       {
+        timeout: LOGIN_TIMEOUT_MS,
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
@@ -87,7 +91,8 @@ const loginAngel = async () => {
     const loginError = new Error(
       error.response?.data?.message || error.message || "Angel One login failed"
     );
-    loginError.statusCode = error.response ? 502 : 500;
+    loginError.statusCode =
+      error.statusCode || (error.response ? 502 : 503);
     throw loginError;
   }
 };

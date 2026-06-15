@@ -26,6 +26,7 @@ function mapHolding(position) {
   return {
     symbol: position.symbol,
     exchange: position.exchange,
+    side: position.side,
     quantity: position.quantity,
     averagePrice: position.averagePrice,
     currentPrice: position.currentPrice,

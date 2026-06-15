@@ -13,6 +13,12 @@ class PositionError extends Error {
 }
 
 async function getCachedQuote(symbol) {
+  const liveQuote =
+    require("./angelWebSocket.service").getLiveQuote(symbol);
+  if (liveQuote) {
+    return liveQuote;
+  }
+
   const cached = quoteCache.get(symbol);
 
   if (cached && Date.now() < cached.expiresAt) {

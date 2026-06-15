@@ -71,4 +71,11 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Auto Trading Backend running on port ${PORT}`);
+  require("./services/angelWebSocket.service")
+    .startAngelMarketStream()
+    .catch((error) => {
+      console.error("Angel One live market stream unavailable", {
+        message: error.message,
+      });
+    });
 });
