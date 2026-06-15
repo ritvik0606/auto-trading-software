@@ -274,6 +274,33 @@ CREATE TABLE IF NOT EXISTS strategy_optimizations (
 CREATE INDEX IF NOT EXISTS strategy_optimizations_score_index
 ON strategy_optimizations (score DESC, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS multi_strategies (
+    id SERIAL PRIMARY KEY,
+    strategy_name VARCHAR(100) NOT NULL,
+    symbol VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'STOPPED' CHECK (
+        status IN ('ACTIVE', 'PAUSED', 'STOPPED')
+    ),
+    timeframe VARCHAR(10) NOT NULL,
+    capital_allocated NUMERIC(14,2) NOT NULL CHECK (
+        capital_allocated > 0
+    ),
+    max_trades INTEGER NOT NULL CHECK (max_trades > 0),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS multi_strategies_active_unique
+ON multi_strategies (UPPER(strategy_name), UPPER(symbol))
+WHERE status = 'ACTIVE';
+
+ALTER TABLE paper_trades
+ADD COLUMN IF NOT EXISTS multi_strategy_id INTEGER
+REFERENCES multi_strategies(id);
+
+CREATE INDEX IF NOT EXISTS paper_trades_multi_strategy_index
+ON paper_trades (multi_strategy_id);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',
