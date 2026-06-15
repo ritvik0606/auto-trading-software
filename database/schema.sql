@@ -344,6 +344,23 @@ ON backtest_runs (created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS backtest_run_trades_run_index
 ON backtest_run_trades (backtest_run_id, trade_sequence);
 
+CREATE TABLE IF NOT EXISTS ai_generated_strategies (
+    id SERIAL PRIMARY KEY,
+    strategy_name VARCHAR(150) NOT NULL,
+    strategy_logic JSONB NOT NULL,
+    indicators JSONB NOT NULL,
+    entry_rules JSONB NOT NULL,
+    exit_rules JSONB NOT NULL,
+    risk_rules JSONB NOT NULL,
+    score NUMERIC(6,2) NOT NULL CHECK (score >= 0 AND score <= 100),
+    win_rate NUMERIC(6,2) NOT NULL,
+    profit_factor NUMERIC(12,4),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ai_generated_strategies_score_index
+ON ai_generated_strategies (score DESC, created_at DESC);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',
