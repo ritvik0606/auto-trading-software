@@ -297,6 +297,8 @@ async function getRiskStatus() {
 }
 
 async function validateNewPaperTrade({ quantity, entryPrice }) {
+  const { validateNewTrade } = require("./riskEngine.service");
+  await validateNewTrade({ quantity, entryPrice });
   const [rules, dashboard] = await Promise.all([
     getRiskRules(),
     getRiskDashboard(),
