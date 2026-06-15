@@ -173,6 +173,21 @@ FROM paper_trades
 WHERE status = 'CLOSED'
 ON CONFLICT (trade_id) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(50),
+    exchange VARCHAR(20),
+    side VARCHAR(10),
+    order_type VARCHAR(20),
+    quantity INTEGER,
+    price NUMERIC(12,2),
+    status VARCHAR(30) DEFAULT 'BLOCKED',
+    broker_order_id VARCHAR(100),
+    mode VARCHAR(20) DEFAULT 'PAPER',
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',
