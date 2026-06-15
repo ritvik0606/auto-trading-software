@@ -1,0 +1,33 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 85% -10%, rgba(77, 232, 194, 0.08), transparent 30%),
+    radial-gradient(circle at 0% 90%, rgba(139, 124, 255, 0.07), transparent 28%),
+    #07101d;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.chart-tooltip {
+  padding: 10px 12px;
+  background: #101d2e;
+  border: 1px solid rgba(143, 163, 187, 0.2);
+  border-radius: 10px;
+  color: #edf4ff;
+}
