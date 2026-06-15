@@ -375,6 +375,66 @@ CREATE TABLE IF NOT EXISTS broker_failover_logs (
 CREATE INDEX IF NOT EXISTS broker_failover_logs_created_index
 ON broker_failover_logs (created_at DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS trade_copier_groups (
+    id SERIAL PRIMARY KEY,
+    group_name VARCHAR(100) NOT NULL UNIQUE,
+    master_strategy VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'STOPPED' CHECK (
+        status IN ('RUNNING', 'STOPPED')
+    ),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS trade_copier_followers (
+    id SERIAL PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES trade_copier_groups(id)
+        ON DELETE CASCADE,
+    follower_name VARCHAR(100) NOT NULL,
+    capital_multiplier NUMERIC(8,2) NOT NULL CHECK (
+        capital_multiplier > 0
+    ),
+    max_position_size INTEGER NOT NULL CHECK (
+        max_position_size > 0
+    ),
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK (
+        status IN ('ACTIVE', 'INACTIVE')
+    ),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (group_id, follower_name)
+);
+
+ALTER TABLE paper_trades
+ADD COLUMN IF NOT EXISTS copier_master_trade_id INTEGER
+REFERENCES paper_trades(id);
+
+ALTER TABLE paper_trades
+ADD COLUMN IF NOT EXISTS copier_follower_id INTEGER
+REFERENCES trade_copier_followers(id);
+
+CREATE TABLE IF NOT EXISTS trade_copier_logs (
+    id SERIAL PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES trade_copier_groups(id)
+        ON DELETE CASCADE,
+    follower_id INTEGER REFERENCES trade_copier_followers(id)
+        ON DELETE SET NULL,
+    symbol VARCHAR(50) NOT NULL,
+    side VARCHAR(10) NOT NULL,
+    quantity INTEGER NOT NULL,
+    master_trade_id INTEGER NOT NULL REFERENCES paper_trades(id)
+        ON DELETE CASCADE,
+    copied_trade_id INTEGER REFERENCES paper_trades(id)
+        ON DELETE SET NULL,
+    execution_status VARCHAR(30) NOT NULL,
+    copied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (group_id, follower_id, master_trade_id)
+);
+
+CREATE INDEX IF NOT EXISTS trade_copier_logs_group_index
+ON trade_copier_logs (group_id, copied_at DESC);
+
+CREATE INDEX IF NOT EXISTS paper_trades_copier_master_index
+ON paper_trades (copier_master_trade_id, copier_follower_id);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',
