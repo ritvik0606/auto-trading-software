@@ -50,6 +50,7 @@ const navigationGroups = [
       ["Strategy Generator", "/strategy-generator", "SG"],
       ["Multi Strategy", "/multi-strategy", "MS"],
       ["Auto Trading", "/auto-trading", "AT"],
+      ["Trade Copier", "/trade-copier", "TC"],
     ],
   },
   {

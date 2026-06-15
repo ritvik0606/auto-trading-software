@@ -1,7 +1,9 @@
 const pool = require("../config/db");
+const { createPaperTrade } = require("./paperTrade.service");
 
 const COPY_INTERVAL_MS = 30 * 1000;
 const groupRunners = new Map();
+let accountSchemaReady = null;
 
 class TradeCopierError extends Error {
   constructor(message, statusCode = 500) {
@@ -756,6 +758,603 @@ async function restoreRunningGroups() {
 
 restoreRunningGroups();
 
+async function ensureAccountSchema() {
+  if (!accountSchemaReady) {
+    accountSchemaReady = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS trade_copier_master_accounts (
+          id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+          account_name VARCHAR(100) NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS trade_copier_follower_accounts (
+          id SERIAL PRIMARY KEY,
+          follower_name VARCHAR(100) NOT NULL UNIQUE,
+          quantity_mode VARCHAR(20) NOT NULL,
+          fixed_quantity INTEGER,
+          quantity_percentage DECIMAL,
+          capital_scale DECIMAL NOT NULL DEFAULT 1,
+          max_retries INTEGER NOT NULL DEFAULT 2,
+          status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS trade_copier_execution_logs (
+          id SERIAL PRIMARY KEY,
+          master_account_id INTEGER,
+          follower_id INTEGER NOT NULL,
+          master_trade_reference VARCHAR(120) NOT NULL,
+          symbol VARCHAR(50) NOT NULL,
+          side VARCHAR(10) NOT NULL,
+          master_quantity INTEGER NOT NULL,
+          copied_quantity INTEGER NOT NULL,
+          price DECIMAL NOT NULL,
+          execution_status VARCHAR(30) NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 1,
+          error_message TEXT,
+          copied_trade_id INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (follower_id, master_trade_reference)
+        )
+      `);
+    })().catch((error) => {
+      accountSchemaReady = null;
+      throw error;
+    });
+  }
+  return accountSchemaReady;
+}
+
+function mapMasterAccount(row) {
+  return row
+    ? {
+        id: row.id,
+        accountName: row.account_name,
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }
+    : null;
+}
+
+function mapFollowerAccount(row) {
+  return {
+    id: row.id,
+    followerName: row.follower_name,
+    quantityMode: row.quantity_mode,
+    fixedQuantity:
+      row.fixed_quantity === null ? null : row.fixed_quantity,
+    quantityPercentage:
+      row.quantity_percentage === null
+        ? null
+        : Number(row.quantity_percentage),
+    capitalScale: Number(row.capital_scale),
+    maxRetries: row.max_retries,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapExecutionLog(row) {
+  return {
+    id: row.id,
+    masterAccountId: row.master_account_id,
+    followerId: row.follower_id,
+    followerName: row.follower_name || null,
+    masterTradeReference: row.master_trade_reference,
+    symbol: row.symbol,
+    side: row.side,
+    masterQuantity: row.master_quantity,
+    copiedQuantity: row.copied_quantity,
+    price: Number(row.price),
+    executionStatus: row.execution_status,
+    attempts: row.attempts,
+    errorMessage: row.error_message,
+    copiedTradeId: row.copied_trade_id,
+    createdAt: row.created_at,
+  };
+}
+
+async function configureMasterAccount(input = {}) {
+  await ensureAccountSchema();
+  const accountName = normalizeName(
+    input.accountName || input.masterName,
+    "accountName"
+  );
+  const status =
+    typeof input.status === "string"
+      ? input.status.trim().toUpperCase()
+      : "ACTIVE";
+
+  if (!["ACTIVE", "PAUSED"].includes(status)) {
+    throw new TradeCopierError(
+      "status must be ACTIVE or PAUSED",
+      400
+    );
+  }
+
+  const result = await pool.query(
+    `INSERT INTO trade_copier_master_accounts (
+       id, account_name, status
+     )
+     VALUES (1, $1, $2)
+     ON CONFLICT (id)
+     DO UPDATE SET
+       account_name = EXCLUDED.account_name,
+       status = EXCLUDED.status,
+       updated_at = CURRENT_TIMESTAMP
+     RETURNING *`,
+    [accountName, status]
+  );
+  return mapMasterAccount(result.rows[0]);
+}
+
+function normalizeFollowerAccount(input = {}) {
+  const followerName = normalizeName(
+    input.followerName,
+    "followerName"
+  );
+  const quantityMode =
+    typeof input.quantityMode === "string"
+      ? input.quantityMode.trim().toUpperCase()
+      : "";
+  const capitalScale =
+    input.capitalScale === undefined
+      ? 1
+      : Number(input.capitalScale);
+  const maxRetries =
+    input.maxRetries === undefined ? 2 : Number(input.maxRetries);
+
+  if (!["FIXED", "PERCENTAGE"].includes(quantityMode)) {
+    throw new TradeCopierError(
+      "quantityMode must be FIXED or PERCENTAGE",
+      400
+    );
+  }
+  if (
+    !Number.isFinite(capitalScale) ||
+    capitalScale <= 0 ||
+    capitalScale > 100
+  ) {
+    throw new TradeCopierError(
+      "capitalScale must be between 0 and 100",
+      400
+    );
+  }
+  if (
+    !Number.isInteger(maxRetries) ||
+    maxRetries < 0 ||
+    maxRetries > 5
+  ) {
+    throw new TradeCopierError(
+      "maxRetries must be an integer between 0 and 5",
+      400
+    );
+  }
+
+  const fixedQuantity =
+    quantityMode === "FIXED" ? Number(input.fixedQuantity) : null;
+  const quantityPercentage =
+    quantityMode === "PERCENTAGE"
+      ? Number(input.quantityPercentage)
+      : null;
+
+  if (
+    quantityMode === "FIXED" &&
+    (!Number.isInteger(fixedQuantity) || fixedQuantity <= 0)
+  ) {
+    throw new TradeCopierError(
+      "fixedQuantity must be a positive integer",
+      400
+    );
+  }
+  if (
+    quantityMode === "PERCENTAGE" &&
+    (!Number.isFinite(quantityPercentage) ||
+      quantityPercentage <= 0 ||
+      quantityPercentage > 1000)
+  ) {
+    throw new TradeCopierError(
+      "quantityPercentage must be between 0 and 1000",
+      400
+    );
+  }
+
+  return {
+    followerName,
+    quantityMode,
+    fixedQuantity,
+    quantityPercentage,
+    capitalScale,
+    maxRetries,
+  };
+}
+
+async function addAccountFollower(input = {}) {
+  await ensureAccountSchema();
+  const follower = normalizeFollowerAccount(input);
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO trade_copier_follower_accounts (
+         follower_name,
+         quantity_mode,
+         fixed_quantity,
+         quantity_percentage,
+         capital_scale,
+         max_retries,
+         status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')
+       RETURNING *`,
+      [
+        follower.followerName,
+        follower.quantityMode,
+        follower.fixedQuantity,
+        follower.quantityPercentage,
+        follower.capitalScale,
+        follower.maxRetries,
+      ]
+    );
+    return mapFollowerAccount(result.rows[0]);
+  } catch (error) {
+    if (error.code === "23505") {
+      throw new TradeCopierError(
+        "Follower account name already exists",
+        409
+      );
+    }
+    throw error;
+  }
+}
+
+function normalizeCopyTrade(input = {}) {
+  const symbol =
+    typeof input.symbol === "string"
+      ? input.symbol.trim().toUpperCase()
+      : "";
+  const side =
+    typeof input.side === "string"
+      ? input.side.trim().toUpperCase()
+      : "";
+  const exchange =
+    typeof input.exchange === "string"
+      ? input.exchange.trim().toUpperCase()
+      : "NSE";
+  const quantity = Number(input.quantity);
+  const price = Number(input.price);
+  const masterTradeReference =
+    typeof input.masterTradeReference === "string"
+      ? input.masterTradeReference.trim()
+      : "";
+
+  if (!symbol || !/^[A-Z0-9&.-]+$/.test(symbol)) {
+    throw new TradeCopierError("symbol is invalid", 400);
+  }
+  if (!["BUY", "SELL"].includes(side)) {
+    throw new TradeCopierError("side must be BUY or SELL", 400);
+  }
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new TradeCopierError(
+      "quantity must be a positive integer",
+      400
+    );
+  }
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new TradeCopierError(
+      "price must be a positive number",
+      400
+    );
+  }
+  if (
+    !masterTradeReference ||
+    masterTradeReference.length > 120 ||
+    !/^[A-Za-z0-9_.:-]+$/.test(masterTradeReference)
+  ) {
+    throw new TradeCopierError(
+      "masterTradeReference is required and contains unsupported characters",
+      400
+    );
+  }
+
+  return {
+    symbol,
+    side,
+    exchange,
+    quantity,
+    price,
+    masterTradeReference,
+  };
+}
+
+function calculateAccountQuantity(masterQuantity, follower) {
+  const baseQuantity =
+    follower.quantity_mode === "FIXED"
+      ? Number(follower.fixed_quantity)
+      : Math.floor(
+          Number(masterQuantity) *
+            (Number(follower.quantity_percentage) / 100)
+        );
+  const scaledQuantity = Math.floor(
+    baseQuantity * Number(follower.capital_scale)
+  );
+
+  if (scaledQuantity < 1) {
+    throw new TradeCopierError(
+      "Calculated follower quantity is below one unit",
+      400
+    );
+  }
+  return scaledQuantity;
+}
+
+async function insertExecutionLog({
+  master,
+  follower,
+  trade,
+  quantity,
+  status,
+  attempts,
+  error,
+  copiedTradeId,
+}) {
+  const result = await pool.query(
+    `INSERT INTO trade_copier_execution_logs (
+       master_account_id,
+       follower_id,
+       master_trade_reference,
+       symbol,
+       side,
+       master_quantity,
+       copied_quantity,
+       price,
+       execution_status,
+       attempts,
+       error_message,
+       copied_trade_id
+     )
+     VALUES (
+       $1, $2, $3, $4, $5, $6, $7,
+       $8, $9, $10, $11, $12
+     )
+     ON CONFLICT (follower_id, master_trade_reference)
+     DO NOTHING
+     RETURNING *`,
+    [
+      master.id,
+      follower.id,
+      trade.masterTradeReference,
+      trade.symbol,
+      trade.side,
+      trade.quantity,
+      quantity,
+      trade.price,
+      status,
+      attempts,
+      error || null,
+      copiedTradeId || null,
+    ]
+  );
+  return result.rows[0] || null;
+}
+
+async function executeFollowerCopy(master, follower, trade) {
+  const existing = await pool.query(
+    `SELECT *
+     FROM trade_copier_execution_logs
+     WHERE follower_id = $1
+       AND master_trade_reference = $2`,
+    [follower.id, trade.masterTradeReference]
+  );
+  if (existing.rows.length > 0) {
+    return {
+      ...mapExecutionLog(existing.rows[0]),
+      executionStatus: "DUPLICATE_SKIPPED",
+    };
+  }
+
+  let quantity = 0;
+  try {
+    quantity = calculateAccountQuantity(
+      trade.quantity,
+      follower
+    );
+  } catch (error) {
+    const log = await insertExecutionLog({
+      master,
+      follower,
+      trade,
+      quantity,
+      status: "FAILED",
+      attempts: 1,
+      error: error.message,
+    });
+    return mapExecutionLog(log);
+  }
+
+  let attempts = 0;
+  let lastError = null;
+  const maximumAttempts = follower.max_retries + 1;
+
+  while (attempts < maximumAttempts) {
+    attempts += 1;
+    try {
+      const copiedTrade = await createPaperTrade(trade.side, {
+        symbol: trade.symbol,
+        exchange: trade.exchange,
+        quantity,
+        price: trade.price,
+      });
+      const log = await insertExecutionLog({
+        master,
+        follower,
+        trade,
+        quantity,
+        status: "SUCCESS",
+        attempts,
+        copiedTradeId: copiedTrade.id,
+      });
+      return mapExecutionLog(log);
+    } catch (error) {
+      lastError = error;
+      if ([400, 409, 423].includes(error.statusCode)) {
+        break;
+      }
+    }
+  }
+
+  const log = await insertExecutionLog({
+    master,
+    follower,
+    trade,
+    quantity,
+    status: "FAILED",
+    attempts,
+    error: lastError?.message || "Follower paper copy failed",
+  });
+  return mapExecutionLog(log);
+}
+
+async function copyAccountTrade(input = {}) {
+  await ensureAccountSchema();
+  const trade = normalizeCopyTrade(input);
+  const [masterResult, followersResult] = await Promise.all([
+    pool.query(
+      `SELECT *
+       FROM trade_copier_master_accounts
+       WHERE id = 1`
+    ),
+    pool.query(
+      `SELECT *
+       FROM trade_copier_follower_accounts
+       WHERE status = 'ACTIVE'
+       ORDER BY id`
+    ),
+  ]);
+
+  if (masterResult.rows.length === 0) {
+    throw new TradeCopierError(
+      "Configure a master account before copying trades",
+      400
+    );
+  }
+  const master = masterResult.rows[0];
+  if (master.status !== "ACTIVE") {
+    throw new TradeCopierError(
+      "Master account is not active",
+      409
+    );
+  }
+  if (followersResult.rows.length === 0) {
+    throw new TradeCopierError(
+      "At least one active follower account is required",
+      400
+    );
+  }
+
+  const executions = [];
+  for (const follower of followersResult.rows) {
+    try {
+      executions.push(
+        await executeFollowerCopy(master, follower, trade)
+      );
+    } catch (error) {
+      executions.push({
+        followerId: follower.id,
+        followerName: follower.follower_name,
+        executionStatus: "FAILED",
+        errorMessage: error.message,
+      });
+    }
+  }
+
+  return {
+    mode: "PAPER_ONLY",
+    masterAccount: mapMasterAccount(master),
+    masterTrade: trade,
+    totalFollowers: executions.length,
+    successfulCopies: executions.filter(
+      (item) => item.executionStatus === "SUCCESS"
+    ).length,
+    failedCopies: executions.filter(
+      (item) => item.executionStatus === "FAILED"
+    ).length,
+    duplicateCopies: executions.filter(
+      (item) => item.executionStatus === "DUPLICATE_SKIPPED"
+    ).length,
+    executions,
+  };
+}
+
+async function getAccountCopierStatus() {
+  await ensureAccountSchema();
+  const [master, followers, summary] = await Promise.all([
+    pool.query(
+      `SELECT * FROM trade_copier_master_accounts WHERE id = 1`
+    ),
+    pool.query(
+      `SELECT *
+       FROM trade_copier_follower_accounts
+       ORDER BY created_at, id`
+    ),
+    pool.query(
+      `SELECT
+         COUNT(*) AS total,
+         COUNT(*) FILTER (
+           WHERE execution_status = 'SUCCESS'
+         ) AS successful,
+         COUNT(*) FILTER (
+           WHERE execution_status = 'FAILED'
+         ) AS failed
+       FROM trade_copier_execution_logs`
+    ),
+  ]);
+  const row = summary.rows[0];
+
+  return {
+    mode: "PAPER_ONLY",
+    status:
+      master.rows[0]?.status === "ACTIVE" &&
+      followers.rows.some((item) => item.status === "ACTIVE")
+        ? "READY"
+        : "SETUP_REQUIRED",
+    masterAccount: mapMasterAccount(master.rows[0]),
+    followers: followers.rows.map(mapFollowerAccount),
+    activeFollowers: followers.rows.filter(
+      (item) => item.status === "ACTIVE"
+    ).length,
+    executionSummary: {
+      total: Number(row.total),
+      successful: Number(row.successful),
+      failed: Number(row.failed),
+    },
+  };
+}
+
+async function getAccountCopyLogs() {
+  await ensureAccountSchema();
+  const result = await pool.query(
+    `SELECT
+       trade_copier_execution_logs.*,
+       trade_copier_follower_accounts.follower_name
+     FROM trade_copier_execution_logs
+     LEFT JOIN trade_copier_follower_accounts
+       ON trade_copier_follower_accounts.id =
+          trade_copier_execution_logs.follower_id
+     ORDER BY trade_copier_execution_logs.created_at DESC,
+              trade_copier_execution_logs.id DESC
+     LIMIT 500`
+  );
+  return result.rows.map(mapExecutionLog);
+}
+
 module.exports = {
   TradeCopierError,
   calculateFollowerQuantity,
@@ -767,4 +1366,10 @@ module.exports = {
   getTradeHistory,
   getExecutionSummary,
   syncGroup,
+  configureMasterAccount,
+  addAccountFollower,
+  copyAccountTrade,
+  getAccountCopierStatus,
+  getAccountCopyLogs,
+  calculateAccountQuantity,
 };
