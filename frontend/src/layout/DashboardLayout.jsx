@@ -16,24 +16,64 @@ import {
 } from "@mui/material";
 
 const drawerWidth = 252;
-const navigation = [
-  ["Dashboard", "/dashboard", "DB"],
-  ["Market Watch", "/market-watch", "MW"],
-  ["Brokers", "/brokers", "BR"],
-  ["Portfolio", "/portfolio", "PF"],
-  ["Holdings", "/holdings", "HD"],
-  ["Funds", "/funds", "FD"],
-  ["Positions", "/positions", "PS"],
-  ["Orders", "/orders", "OR"],
-  ["Order Book", "/order-book", "OB"],
-  ["Trade Book", "/trade-book", "TB"],
-  ["Strategies", "/strategies", "ST"],
-  ["Watchlist", "/watchlist", "WL"],
-  ["Risk Dashboard", "/risk", "RK"],
-  ["Performance", "/performance", "PM"],
-  ["AI Insights", "/ai-insights", "AI"],
-  ["Mobile Control", "/mobile", "MC"],
+const navigationGroups = [
+  {
+    label: "Workspace",
+    items: [
+      ["Dashboard", "/dashboard", "DB"],
+      ["Multi Chart", "/multi-chart", "CH"],
+      ["Daily P&L", "/daily-pnl", "DP"],
+    ],
+  },
+  {
+    label: "Markets",
+    items: [
+      ["Market Watch", "/market-watch", "MW"],
+      ["Option Chain", "/option-chain", "OC"],
+      ["Advanced Scanner", "/scanner", "SC"],
+      ["Heatmap", "/heatmap", "HM"],
+      ["Watchlist", "/watchlist", "WL"],
+    ],
+  },
+  {
+    label: "Trading",
+    items: [
+      ["Orders", "/orders", "OR"],
+      ["Order Book", "/order-book", "OB"],
+      ["Trade Book", "/trade-book", "TB"],
+      ["Trade Journal", "/trade-journal", "TJ"],
+      ["Positions", "/positions", "PS"],
+      ["Strategies", "/strategies", "ST"],
+      ["Strategy Builder", "/strategy-builder", "SB"],
+    ],
+  },
+  {
+    label: "Portfolio",
+    items: [
+      ["Portfolio", "/portfolio", "PF"],
+      ["Holdings", "/holdings", "HD"],
+      ["Funds", "/funds", "FD"],
+      ["Portfolio Analytics", "/portfolio-analytics", "PA"],
+    ],
+  },
+  {
+    label: "Analytics",
+    items: [
+      ["Execution Analytics", "/execution-analytics", "EA"],
+      ["Performance", "/performance", "PM"],
+      ["AI Insights", "/ai-insights", "AI"],
+      ["Risk Dashboard", "/risk", "RK"],
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      ["Brokers", "/brokers", "BR"],
+      ["Mobile Control", "/mobile", "MC"],
+    ],
+  },
 ];
+const navigation = navigationGroups.flatMap((group) => group.items);
 
 function Sidebar({ onNavigate }) {
   return (
@@ -66,37 +106,50 @@ function Sidebar({ onNavigate }) {
       </Box>
       <Divider />
       <List sx={{ px: 1.5, py: 2, flex: 1, overflowY: "auto" }}>
-        {navigation.map(([label, path, marker]) => (
-          <ListItemButton
-            key={path}
-            component={NavLink}
-            to={path}
-            onClick={onNavigate}
-            sx={{
-              mb: 0.5,
-              borderRadius: 2,
-              color: "text.secondary",
-              "&.active": {
-                bgcolor: "rgba(77, 232, 194, 0.1)",
-                color: "primary.main",
-              },
-            }}
-          >
-            <Box
-              sx={{
-                width: 30,
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: "0.04em",
-              }}
+        {navigationGroups.map((group) => (
+          <Box key={group.label} mb={1.5}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              fontWeight={800}
+              letterSpacing="0.12em"
+              sx={{ px: 1.5 }}
             >
-              {marker}
-            </Box>
-            <ListItemText
-              primary={label}
-              primaryTypographyProps={{ fontSize: 14, fontWeight: 650 }}
-            />
-          </ListItemButton>
+              {group.label.toUpperCase()}
+            </Typography>
+            {group.items.map(([label, path, marker]) => (
+              <ListItemButton
+                key={path}
+                component={NavLink}
+                to={path}
+                onClick={onNavigate}
+                sx={{
+                  mt: 0.35,
+                  borderRadius: 2,
+                  color: "text.secondary",
+                  "&.active": {
+                    bgcolor: "rgba(77, 232, 194, 0.1)",
+                    color: "primary.main",
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 30,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {marker}
+                </Box>
+                <ListItemText
+                  primary={label}
+                  primaryTypographyProps={{ fontSize: 13, fontWeight: 650 }}
+                />
+              </ListItemButton>
+            ))}
+          </Box>
         ))}
       </List>
       <Box sx={{ p: 2 }}>

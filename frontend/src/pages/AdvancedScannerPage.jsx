@@ -1,0 +1,122 @@
+import { useState } from "react";
+import { Button, Chip, Grid, MenuItem, TextField, Typography } from "@mui/material";
+import { getDataSafe } from "../services/api";
+import ErrorAlert from "../components/ErrorAlert";
+import OfflineNotice from "../components/OfflineNotice";
+import PageHeader from "../components/PageHeader";
+import StatCard from "../components/StatCard";
+import DataTable from "../components/DataTable";
+import { money, percent } from "../utils/format";
+
+const groups = [
+  ["nifty50", "Nifty 50"],
+  ["banknifty", "Bank Nifty"],
+  ["fno", "F&O Stocks"],
+  ["custom", "Custom Watchlist"],
+];
+
+export default function AdvancedScannerPage() {
+  const [group, setGroup] = useState("nifty50");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
+
+  const scan = async () => {
+    setLoading(true);
+    setError("");
+    const response = await getDataSafe(`/api/scanner/${group}`, {
+      group: groups.find(([key]) => key === group)?.[1],
+      count: 0,
+      items: [],
+    });
+    setResult(response.data);
+    setOffline(response.unavailable || Boolean(response.error));
+    if (response.error && !response.error.isUnavailable) {
+      setError(response.error.message);
+    }
+    setLoading(false);
+  };
+  const items = result?.items || [];
+  const available = items.filter((item) => !item.error);
+  const columns = [
+    { key: "symbol", label: "Symbol" },
+    {
+      key: "ltp",
+      label: "LTP",
+      align: "right",
+      render: (row) => (row.ltp == null ? "Unavailable" : money(row.ltp)),
+    },
+    {
+      key: "changePercent",
+      label: "Change",
+      align: "right",
+      render: (row) => row.changePercent == null ? "--" : percent(row.changePercent),
+    },
+    { key: "volume", label: "Volume", align: "right" },
+    {
+      key: "trend",
+      label: "Trend",
+      render: (row) => (
+        <Chip
+          size="small"
+          label={row.trend}
+          color={
+            row.trend === "UPTREND"
+              ? "success"
+              : row.trend === "DOWNTREND"
+                ? "error"
+                : "default"
+          }
+          variant="outlined"
+        />
+      ),
+    },
+    {
+      key: "signal",
+      label: "Signal",
+      render: (row) => (
+        <Typography
+          fontWeight={800}
+          color={row.buySignal ? "success.main" : row.sellSignal ? "error.main" : "text.secondary"}
+        >
+          {row.buySignal ? "BUY" : row.sellSignal ? "SELL" : "HOLD"}
+        </Typography>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Discovery"
+        title="Advanced scanner"
+        description="Scan index, F&O, and custom universes for trend and EMA_RSI signals."
+      />
+      <ErrorAlert message={error} onRetry={scan} />
+      {offline && <OfflineNotice title="Scanner market data unavailable" />}
+      <Grid container spacing={2.5}>
+        <Grid size={{ xs: 12 }}>
+          <Grid container spacing={1.5} alignItems="center">
+            <Grid size={{ xs: 12, sm: 5, md: 3 }}>
+              <TextField select label="Scanner universe" value={group} onChange={(event) => setGroup(event.target.value)} fullWidth>
+                {groups.map(([key, label]) => <MenuItem key={key} value={key}>{label}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4, md: 2 }}>
+              <Button variant="contained" size="large" fullWidth onClick={scan} disabled={loading}>
+                {loading ? "Scanning..." : "Run scan"}
+              </Button>
+            </Grid>
+          </Grid>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Symbols scanned" value={result?.count ?? 0} /></Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Buy signals" value={items.filter((item) => item.buySignal).length} tone="success" /></Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Available data" value={available.length} tone="secondary" /></Grid>
+        <Grid size={{ xs: 12 }}>
+          <DataTable columns={columns} rows={items} getRowId={(row) => row.symbol} emptyMessage="Run a scan to populate the terminal" />
+        </Grid>
+      </Grid>
+    </>
+  );
+}

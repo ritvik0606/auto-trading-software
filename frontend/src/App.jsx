@@ -22,6 +22,25 @@ const HoldingsPage = lazy(() => import("./pages/HoldingsPage"));
 const FundsPage = lazy(() => import("./pages/FundsPage"));
 const OrderBookPage = lazy(() => import("./pages/OrderBookPage"));
 const TradeBookPage = lazy(() => import("./pages/TradeBookPage"));
+const OptionChainPage = lazy(() => import("./pages/OptionChainPage"));
+const AdvancedScannerPage = lazy(() => import("./pages/AdvancedScannerPage"));
+const StrategyBuilderPage = lazy(() => import("./pages/StrategyBuilderPage"));
+const MultiChartDashboardPage = lazy(
+  () => import("./pages/MultiChartDashboardPage")
+);
+const TradeJournalWorkspacePage = lazy(
+  () => import("./pages/TradeJournalWorkspacePage")
+);
+const ExecutionAnalyticsPage = lazy(
+  () => import("./pages/ExecutionAnalyticsPage")
+);
+const PortfolioAnalyticsPage = lazy(
+  () => import("./pages/PortfolioAnalyticsPage")
+);
+const DailyPnLMonitorPage = lazy(
+  () => import("./pages/DailyPnLMonitorPage")
+);
+const HeatmapPage = lazy(() => import("./pages/HeatmapPage"));
 
 export default function App() {
   return (
@@ -31,6 +50,9 @@ export default function App() {
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/market-watch" element={<MarketWatchPage />} />
+          <Route path="/option-chain" element={<OptionChainPage />} />
+          <Route path="/scanner" element={<AdvancedScannerPage />} />
+          <Route path="/heatmap" element={<HeatmapPage />} />
           <Route path="/brokers" element={<BrokerManagementPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/holdings" element={<HoldingsPage />} />
@@ -39,10 +61,16 @@ export default function App() {
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/order-book" element={<OrderBookPage />} />
           <Route path="/trade-book" element={<TradeBookPage />} />
+          <Route path="/trade-journal" element={<TradeJournalWorkspacePage />} />
           <Route path="/strategies" element={<StrategiesPage />} />
+          <Route path="/strategy-builder" element={<StrategyBuilderPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/risk" element={<RiskPage />} />
           <Route path="/performance" element={<PerformancePage />} />
+          <Route path="/multi-chart" element={<MultiChartDashboardPage />} />
+          <Route path="/execution-analytics" element={<ExecutionAnalyticsPage />} />
+          <Route path="/portfolio-analytics" element={<PortfolioAnalyticsPage />} />
+          <Route path="/daily-pnl" element={<DailyPnLMonitorPage />} />
           <Route path="/ai-insights" element={<AIInsightsPage />} />
           <Route path="/mobile" element={<MobileControlPage />} />
         </Route>
