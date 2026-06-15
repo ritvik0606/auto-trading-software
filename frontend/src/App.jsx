@@ -54,6 +54,9 @@ const RiskEnginePage = lazy(() => import("./pages/RiskEnginePage"));
 const PortfolioHedgingPage = lazy(
   () => import("./pages/PortfolioHedgingPage")
 );
+const BrokerFailoverPage = lazy(
+  () => import("./pages/BrokerFailoverPage")
+);
 
 export default function App() {
   return (
@@ -68,6 +71,7 @@ export default function App() {
             <Route path="/scanner" element={<AdvancedScannerPage />} />
             <Route path="/heatmap" element={<HeatmapPage />} />
             <Route path="/brokers" element={<BrokerManagementPage />} />
+            <Route path="/broker-failover" element={<BrokerFailoverPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/holdings" element={<HoldingsPage />} />
             <Route path="/funds" element={<FundsPage />} />

@@ -9,30 +9,21 @@ const SUPPORTED_BROKERS = new Set([
   PRIMARY_BROKER,
   SECONDARY_BROKER,
 ]);
-const MONITOR_INTERVAL_MS = 5 * 60 * 1000;
+const MONITOR_INTERVAL_MS = 30 * 1000;
 
 let activeBroker = PRIMARY_BROKER;
+let manualOverride = null;
 let activeFailoverLogId = null;
 let serviceStartedAt = Date.now();
-let monitorRunning = false;
+let heartbeatRunning = false;
+let heartbeatTimer = null;
+let lastHeartbeatAt = null;
+let lastHeartbeatError = null;
 let lastFailedFailoverReason = null;
+
 const healthMetrics = {
-  ANGEL_ONE: {
-    checks: 0,
-    healthyChecks: 0,
-    failures: 0,
-    totalLatencyMs: 0,
-    lastCheckAt: null,
-    lastResult: null,
-  },
-  PAYTM_MONEY: {
-    checks: 0,
-    healthyChecks: 0,
-    failures: 0,
-    totalLatencyMs: 0,
-    lastCheckAt: null,
-    lastResult: null,
-  },
+  ANGEL_ONE: createMetric(),
+  PAYTM_MONEY: createMetric(),
 };
 
 class BrokerFailoverError extends Error {
@@ -43,8 +34,19 @@ class BrokerFailoverError extends Error {
   }
 }
 
+function createMetric() {
+  return {
+    checks: 0,
+    healthyChecks: 0,
+    failures: 0,
+    totalLatencyMs: 0,
+    lastCheckAt: null,
+    lastResult: null,
+  };
+}
+
 function round(value) {
-  return Number(Number(value).toFixed(2));
+  return Number(Number(value || 0).toFixed(2));
 }
 
 function recordHealthMetric(broker, result) {
@@ -61,55 +63,35 @@ function recordHealthMetric(broker, result) {
   }
 }
 
-async function checkAngelHealth() {
+async function checkBrokerHealth(broker) {
+  if (!SUPPORTED_BROKERS.has(broker)) {
+    throw new BrokerFailoverError("Unsupported broker", 400);
+  }
+
   const startedAt = Date.now();
-  const status = getSessionStatus(PRIMARY_BROKER);
+  const status = getSessionStatus(broker);
   const result = {
-    broker: PRIMARY_BROKER,
-    healthy: status.connected,
-    apiAvailable: status.configured,
-    sessionValid: status.sessionValid,
-    latencyMs: status.latencyMs ?? Date.now() - startedAt,
+    broker,
+    healthy: Boolean(status.connected && status.sessionValid),
+    configured: Boolean(status.configured),
+    apiAvailable: Boolean(status.configured),
+    sessionValid: Boolean(status.sessionValid),
+    connected: Boolean(status.connected),
+    latencyMs: Number(status.latencyMs ?? Date.now() - startedAt),
     checkedAt: new Date().toISOString(),
+    connectedAt: status.connectedAt,
+    expiresAt: status.expiresAt,
     reason: status.connected
       ? null
-      : status.reason || "Angel One session is not connected",
+      : status.reason || `${broker} session is not connected`,
   };
 
-  recordHealthMetric(PRIMARY_BROKER, result);
+  recordHealthMetric(broker, result);
   return result;
 }
 
-async function checkPaytmHealth() {
-  const startedAt = Date.now();
-  const sessionStatus = getSessionStatus(SECONDARY_BROKER);
-  const result = {
-    broker: SECONDARY_BROKER,
-    healthy: sessionStatus.connected,
-    apiAvailable: sessionStatus.configured,
-    sessionValid: sessionStatus.sessionValid,
-    latencyMs: sessionStatus.latencyMs ?? Date.now() - startedAt,
-    checkedAt: new Date().toISOString(),
-    reason: sessionStatus.connected
-      ? null
-      : sessionStatus.reason || "Paytm Money session is not connected",
-  };
-
-  recordHealthMetric(SECONDARY_BROKER, result);
-  return result;
-}
-
-async function checkBrokerHealth(broker) {
-  if (broker === PRIMARY_BROKER) {
-    return checkAngelHealth();
-  }
-
-  if (broker === SECONDARY_BROKER) {
-    return checkPaytmHealth();
-  }
-
-  throw new BrokerFailoverError("Unsupported broker", 400);
-}
+const checkAngelHealth = () => checkBrokerHealth(PRIMARY_BROKER);
+const checkPaytmHealth = () => checkBrokerHealth(SECONDARY_BROKER);
 
 async function createFailoverLog(reason, status = "ACTIVE") {
   const result = await pool.query(
@@ -149,91 +131,133 @@ async function markRecovered(status = "RECOVERED") {
   return result.rows[0] || null;
 }
 
-async function switchBroker(targetBroker, reason, manual = false) {
-  if (targetBroker === activeBroker) {
-    throw new BrokerFailoverError(
-      `${targetBroker} is already the active broker`,
-      409
-    );
-  }
-
-  const health = await checkBrokerHealth(targetBroker);
-  if (!health.healthy) {
-    throw new BrokerFailoverError(
-      `${targetBroker} session is unavailable: ${health.reason}`,
-      503
-    );
-  }
+async function switchAutomatically(targetBroker, reason) {
+  const previousBroker = activeBroker;
 
   if (targetBroker === SECONDARY_BROKER) {
-    await createFailoverLog(
-      manual ? "MANUAL_SWITCH" : reason || "PRIMARY_BROKER_UNAVAILABLE"
-    );
+    await createFailoverLog(reason, "ACTIVE");
   } else {
-    await markRecovered(manual ? "MANUAL_SWITCHBACK" : "RECOVERED");
+    await markRecovered("RECOVERED");
   }
 
   activeBroker = targetBroker;
-  return {
-    activeBroker,
-    health,
-    mode: "PAPER_ONLY",
-  };
+  lastFailedFailoverReason = null;
+  return { previousBroker, activeBroker };
 }
 
-async function monitorBrokers() {
-  if (monitorRunning) {
+async function recordFailedHeartbeat(reason) {
+  if (reason === lastFailedFailoverReason) {
+    return;
+  }
+
+  const latest = await pool.query(
+    `SELECT failure_reason
+     FROM broker_failover_logs
+     WHERE status = 'FAILED'
+       AND recovery_time IS NULL
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`
+  );
+  if (latest.rows[0]?.failure_reason === reason) {
+    lastFailedFailoverReason = reason;
+    return;
+  }
+
+  await createFailoverLog(reason, "FAILED");
+  lastFailedFailoverReason = reason;
+}
+
+async function runHeartbeat() {
+  if (heartbeatRunning) {
     return null;
   }
 
-  monitorRunning = true;
+  heartbeatRunning = true;
   try {
-    const angelHealth = await checkAngelHealth();
-    let paytmHealth = healthMetrics.PAYTM_MONEY.lastResult;
+    const [angelHealth, paytmHealth] = await Promise.all([
+      checkAngelHealth(),
+      checkPaytmHealth(),
+    ]);
 
-    if (activeBroker === PRIMARY_BROKER && !angelHealth.healthy) {
-      paytmHealth = await checkPaytmHealth();
-      if (paytmHealth.healthy) {
-        await createFailoverLog(angelHealth.reason);
-        activeBroker = SECONDARY_BROKER;
-        lastFailedFailoverReason = null;
-      } else {
-        const failureReason =
-          `Primary unavailable: ${angelHealth.reason}; ` +
-          `secondary unavailable: ${paytmHealth.reason}`;
-        if (failureReason !== lastFailedFailoverReason) {
-          await createFailoverLog(failureReason, "FAILED");
-          lastFailedFailoverReason = failureReason;
+    if (!manualOverride) {
+      if (activeBroker === PRIMARY_BROKER && !angelHealth.healthy) {
+        if (paytmHealth.healthy) {
+          await switchAutomatically(
+            SECONDARY_BROKER,
+            `AUTO_FAILOVER: ${angelHealth.reason}`
+          );
+        } else {
+          await recordFailedHeartbeat(
+            `Both brokers unavailable. Angel One: ${angelHealth.reason}; Paytm Money: ${paytmHealth.reason}`
+          );
         }
+      } else if (activeBroker === SECONDARY_BROKER) {
+        const autoSwitchback =
+          process.env.BROKER_AUTO_SWITCHBACK?.trim().toLowerCase() !==
+          "false";
+        if (
+          angelHealth.healthy &&
+          (autoSwitchback || !paytmHealth.healthy)
+        ) {
+          await switchAutomatically(
+            PRIMARY_BROKER,
+            "PRIMARY_BROKER_RECOVERED"
+          );
+        } else if (!paytmHealth.healthy && !angelHealth.healthy) {
+          await recordFailedHeartbeat(
+            `Both brokers unavailable. Angel One: ${angelHealth.reason}; Paytm Money: ${paytmHealth.reason}`
+          );
+        }
+      } else {
+        lastFailedFailoverReason = null;
       }
-    } else if (
-      activeBroker === SECONDARY_BROKER &&
-      angelHealth.healthy &&
-      process.env.BROKER_AUTO_SWITCHBACK?.trim().toLowerCase() !== "false"
-    ) {
-      await markRecovered();
-      activeBroker = PRIMARY_BROKER;
-      lastFailedFailoverReason = null;
     }
 
-    return { angelHealth, paytmHealth };
+    lastHeartbeatAt = new Date().toISOString();
+    lastHeartbeatError = null;
+    return {
+      checkedAt: lastHeartbeatAt,
+      brokers: {
+        ANGEL_ONE: angelHealth,
+        PAYTM_MONEY: paytmHealth,
+      },
+    };
   } catch (error) {
-    console.error("Broker failover monitor failed", {
-      message: error.message,
+    lastHeartbeatAt = new Date().toISOString();
+    lastHeartbeatError =
+      error.message || "Broker failover heartbeat failed";
+    console.error("Broker failover heartbeat failed", {
+      message: lastHeartbeatError,
     });
+    return null;
   } finally {
-    monitorRunning = false;
+    heartbeatRunning = false;
   }
 }
 
+function startHeartbeat() {
+  if (heartbeatTimer) {
+    return;
+  }
+
+  setImmediate(() => runHeartbeat());
+  heartbeatTimer = setInterval(runHeartbeat, MONITOR_INTERVAL_MS);
+  heartbeatTimer.unref();
+}
+
+function stopHeartbeat() {
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
 async function getBrokerFailoverStatus() {
-  const monitored = await monitorBrokers();
+  const heartbeat = await runHeartbeat();
   const angelHealth =
-    monitored?.angelHealth ||
+    heartbeat?.brokers?.ANGEL_ONE ||
     healthMetrics.ANGEL_ONE.lastResult ||
     (await checkAngelHealth());
   const paytmHealth =
-    monitored?.paytmHealth ||
+    heartbeat?.brokers?.PAYTM_MONEY ||
     healthMetrics.PAYTM_MONEY.lastResult ||
     (await checkPaytmHealth());
   const activeHealth =
@@ -245,6 +269,15 @@ async function getBrokerFailoverStatus() {
     activeBroker,
     health: activeHealth.healthy ? "HEALTHY" : "UNAVAILABLE",
     mode: "PAPER_ONLY",
+    overrideMode: manualOverride ? "MANUAL" : "AUTO",
+    manualOverride,
+    heartbeat: {
+      intervalSeconds: MONITOR_INTERVAL_MS / 1000,
+      running: Boolean(heartbeatTimer),
+      checkInProgress: heartbeatRunning,
+      lastHeartbeatAt,
+      lastError: lastHeartbeatError,
+    },
     brokers: {
       ANGEL_ONE: angelHealth,
       PAYTM_MONEY: paytmHealth,
@@ -265,60 +298,112 @@ function mapFailoverLog(row) {
   };
 }
 
-async function getFailoverHistory() {
+async function getFailoverLogs() {
   const result = await pool.query(
     `SELECT *
      FROM broker_failover_logs
-     ORDER BY created_at DESC, id DESC`
+     ORDER BY created_at DESC, id DESC
+     LIMIT 500`
   );
 
   return result.rows.map(mapFailoverLog);
 }
 
 async function manualSwitch(input = {}) {
-  const broker =
+  const requestedBroker =
     typeof input.broker === "string"
       ? input.broker.trim().toUpperCase()
       : "";
 
-  if (!SUPPORTED_BROKERS.has(broker)) {
+  if (requestedBroker === "AUTO") {
+    const previousOverride = manualOverride;
+    manualOverride = null;
+    await createFailoverLog(
+      `MANUAL_OVERRIDE_RELEASED: ${previousOverride || "NONE"}`,
+      "AUTO_MODE"
+    );
+    await runHeartbeat();
+    return getBrokerFailoverStatus();
+  }
+
+  if (!SUPPORTED_BROKERS.has(requestedBroker)) {
     throw new BrokerFailoverError(
-      `broker must be one of: ${Array.from(SUPPORTED_BROKERS).join(", ")}`,
+      `broker must be one of: ${Array.from(
+        SUPPORTED_BROKERS
+      ).join(", ")}, AUTO`,
       400
     );
   }
 
-  return switchBroker(broker, "MANUAL_SWITCH", true);
+  const health = await checkBrokerHealth(requestedBroker);
+  const force = input.force === true;
+  if (!health.healthy && !force) {
+    throw new BrokerFailoverError(
+      `${requestedBroker} session is unavailable: ${health.reason}`,
+      503
+    );
+  }
+
+  const previousBroker = activeBroker;
+  if (
+    previousBroker === SECONDARY_BROKER &&
+    requestedBroker === PRIMARY_BROKER
+  ) {
+    await markRecovered("MANUAL_SWITCHBACK");
+  }
+
+  activeBroker = requestedBroker;
+  manualOverride = requestedBroker;
+  await createFailoverLog(
+    `MANUAL_OVERRIDE: ${previousBroker} -> ${requestedBroker}${
+      force && !health.healthy ? " (FORCED_UNHEALTHY)" : ""
+    }`,
+    "MANUAL_OVERRIDE"
+  );
+
+  return {
+    activeBroker,
+    previousBroker,
+    health,
+    overrideMode: "MANUAL",
+    manualOverride,
+    mode: "PAPER_ONLY",
+  };
+}
+
+function formatBrokerMetrics(broker) {
+  const metric = healthMetrics[broker];
+  return {
+    checks: metric.checks,
+    failures: metric.failures,
+    uptimePercent:
+      metric.checks === 0
+        ? null
+        : round((metric.healthyChecks / metric.checks) * 100),
+    averageLatencyMs:
+      metric.checks === 0
+        ? null
+        : round(metric.totalLatencyMs / metric.checks),
+    lastCheckAt: metric.lastCheckAt,
+  };
 }
 
 async function getBrokerMetrics() {
   const result = await pool.query(
     `SELECT
-       COUNT(*) AS failures,
+       COUNT(*) FILTER (
+         WHERE status IN ('ACTIVE', 'FAILED')
+       ) AS failures,
+       COUNT(*) AS events,
        MAX(switch_time) AS last_switch_time
      FROM broker_failover_logs`
   );
   const row = result.rows[0];
-  const formatBrokerMetrics = (broker) => {
-    const metric = healthMetrics[broker];
-    return {
-      checks: metric.checks,
-      failures: metric.failures,
-      uptimePercent:
-        metric.checks === 0
-          ? null
-          : round((metric.healthyChecks / metric.checks) * 100),
-      averageLatencyMs:
-        metric.checks === 0
-          ? null
-          : round(metric.totalLatencyMs / metric.checks),
-      lastCheckAt: metric.lastCheckAt,
-    };
-  };
 
   return {
     serviceUptimeSeconds: round((Date.now() - serviceStartedAt) / 1000),
     failures: Number(row.failures),
+    events: Number(row.events),
     averageLatencyMs: {
       ANGEL_ONE: formatBrokerMetrics(PRIMARY_BROKER).averageLatencyMs,
       PAYTM_MONEY: formatBrokerMetrics(SECONDARY_BROKER).averageLatencyMs,
@@ -327,14 +412,18 @@ async function getBrokerMetrics() {
       ANGEL_ONE: formatBrokerMetrics(PRIMARY_BROKER).uptimePercent,
       PAYTM_MONEY: formatBrokerMetrics(SECONDARY_BROKER).uptimePercent,
     },
+    checks: {
+      ANGEL_ONE: formatBrokerMetrics(PRIMARY_BROKER).checks,
+      PAYTM_MONEY: formatBrokerMetrics(SECONDARY_BROKER).checks,
+    },
     lastSwitchTime: row.last_switch_time,
+    lastHeartbeatAt,
+    heartbeatIntervalSeconds: MONITOR_INTERVAL_MS / 1000,
     activeBroker,
+    overrideMode: manualOverride ? "MANUAL" : "AUTO",
     mode: "PAPER_ONLY",
   };
 }
-
-const monitor = setInterval(monitorBrokers, MONITOR_INTERVAL_MS);
-monitor.unref();
 
 async function restoreFailoverState() {
   try {
@@ -355,6 +444,8 @@ async function restoreFailoverState() {
     console.error("Unable to restore broker failover state", {
       message: error.message,
     });
+  } finally {
+    startHeartbeat();
   }
 }
 
@@ -364,9 +455,12 @@ module.exports = {
   BrokerFailoverError,
   checkAngelHealth,
   checkPaytmHealth,
-  monitorBrokers,
+  runHeartbeat,
+  startHeartbeat,
+  stopHeartbeat,
   getBrokerFailoverStatus,
-  getFailoverHistory,
+  getFailoverHistory: getFailoverLogs,
+  getFailoverLogs,
   manualSwitch,
   getBrokerMetrics,
 };

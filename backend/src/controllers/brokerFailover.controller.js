@@ -1,6 +1,6 @@
 const {
   getBrokerFailoverStatus,
-  getFailoverHistory,
+  getFailoverLogs,
   manualSwitch,
   getBrokerMetrics,
 } = require("../services/brokerFailover.service");
@@ -33,7 +33,7 @@ exports.history = async (req, res) => {
   try {
     res.json({
       success: true,
-      data: await getFailoverHistory(),
+      data: await getFailoverLogs(),
     });
   } catch (error) {
     sendFailoverError(res, error);
