@@ -34,33 +34,54 @@ async function getStartingCapital() {
 }
 
 async function getClosedTrades() {
+  const { ensureSchema } = require("./paperSimulator.service");
+  await ensureSchema();
   const result = await pool.query(
-    `SELECT
-       paper_trades.id,
-       paper_trades.symbol,
-       paper_trades.exchange,
-       paper_trades.trade_type,
-       paper_trades.entry_price,
-       paper_trades.exit_price,
-       paper_trades.quantity,
-       paper_trades.pnl,
-       paper_trades.created_at,
-       COALESCE(
-         paper_trades.closed_at,
-         paper_trades.created_at
-       ) AS closed_at,
-       COALESCE(
-         multi_strategies.strategy_name,
-         'MANUAL_PAPER'
-       ) AS strategy_name
-     FROM paper_trades
-     LEFT JOIN multi_strategies
-       ON multi_strategies.id = paper_trades.multi_strategy_id
-     WHERE paper_trades.status = 'CLOSED'
-     ORDER BY COALESCE(
-       paper_trades.closed_at,
-       paper_trades.created_at
-     ), paper_trades.id`
+    `SELECT *
+     FROM (
+       SELECT
+         CONCAT('PAPER-', paper_trades.id) AS id,
+         paper_trades.symbol,
+         paper_trades.exchange,
+         paper_trades.trade_type,
+         paper_trades.entry_price,
+         paper_trades.exit_price,
+         paper_trades.quantity,
+         paper_trades.pnl,
+         paper_trades.created_at,
+         COALESCE(
+           paper_trades.closed_at,
+           paper_trades.created_at
+         ) AS closed_at,
+         COALESCE(
+           multi_strategies.strategy_name,
+           'MANUAL_PAPER'
+         ) AS strategy_name,
+         'PAPER_ENGINE' AS broker
+       FROM paper_trades
+       LEFT JOIN multi_strategies
+         ON multi_strategies.id = paper_trades.multi_strategy_id
+       WHERE paper_trades.status = 'CLOSED'
+
+       UNION ALL
+
+       SELECT
+         CONCAT('SIM-', id) AS id,
+         symbol,
+         exchange,
+         side AS trade_type,
+         average_price AS entry_price,
+         current_price AS exit_price,
+         quantity,
+         realized_pnl AS pnl,
+         created_at,
+         closed_at,
+         strategy_name,
+         'PAPER_SIMULATOR' AS broker
+       FROM paper_simulator_positions
+       WHERE status = 'CLOSED'
+     ) trades
+     ORDER BY closed_at, id`
   );
 
   return result.rows.map((row) => ({
@@ -75,7 +96,7 @@ async function getClosedTrades() {
     openedAt: row.created_at,
     closedAt: row.closed_at,
     strategyName: row.strategy_name,
-    broker: "PAPER_ENGINE",
+    broker: row.broker,
   }));
 }
 
@@ -305,7 +326,7 @@ async function getSummary() {
         : round(context.metrics.totalPnL / context.drawdown.maxDrawdown),
     bestTrade: mapTrade(bestTrade),
     worstTrade: mapTrade(worstTrade),
-    brokerAttribution: "PAPER_ENGINE",
+    brokerAttribution: "EXECUTION_SOURCE",
   };
 }
 

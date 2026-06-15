@@ -61,6 +61,7 @@ const StrategyGeneratorDashboardPage = lazy(
   () => import("./pages/StrategyGeneratorDashboardPage")
 );
 const TradeCopierPage = lazy(() => import("./pages/TradeCopierPage"));
+const PaperSimulatorPage = lazy(() => import("./pages/PaperSimulatorPage"));
 
 export default function App() {
   return (
@@ -92,6 +93,7 @@ export default function App() {
             <Route path="/multi-strategy" element={<MultiStrategyEnginePage />} />
             <Route path="/auto-trading" element={<AutoTradingPage />} />
             <Route path="/trade-copier" element={<TradeCopierPage />} />
+            <Route path="/paper-simulator" element={<PaperSimulatorPage />} />
             <Route path="/watchlist" element={<WatchlistPage />} />
             <Route path="/risk" element={<RiskPage />} />
             <Route path="/risk-engine" element={<RiskEnginePage />} />
