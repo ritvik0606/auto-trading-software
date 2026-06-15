@@ -57,6 +57,9 @@ const PortfolioHedgingPage = lazy(
 const BrokerFailoverPage = lazy(
   () => import("./pages/BrokerFailoverPage")
 );
+const StrategyGeneratorDashboardPage = lazy(
+  () => import("./pages/StrategyGeneratorDashboardPage")
+);
 
 export default function App() {
   return (
@@ -82,6 +85,7 @@ export default function App() {
             <Route path="/trade-journal" element={<TradeJournalWorkspacePage />} />
             <Route path="/strategies" element={<StrategiesPage />} />
             <Route path="/strategy-builder" element={<StrategyBuilderPage />} />
+            <Route path="/strategy-generator" element={<StrategyGeneratorDashboardPage />} />
             <Route path="/ai-strategy" element={<AIStrategyGeneratorPage />} />
             <Route path="/backtesting-lab" element={<BacktestingLabPage />} />
             <Route path="/multi-strategy" element={<MultiStrategyEnginePage />} />

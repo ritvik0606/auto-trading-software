@@ -47,6 +47,7 @@ const navigationGroups = [
       ["Positions", "/positions", "PS"],
       ["Strategies", "/strategies", "ST"],
       ["Strategy Builder", "/strategy-builder", "SB"],
+      ["Strategy Generator", "/strategy-generator", "SG"],
       ["Multi Strategy", "/multi-strategy", "MS"],
       ["Auto Trading", "/auto-trading", "AT"],
     ],

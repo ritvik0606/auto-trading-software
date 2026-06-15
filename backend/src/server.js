@@ -38,6 +38,9 @@ const mobileControlRoutes = require("./routes/mobileControl.routes");
 const autoTradeRoutes = require("./routes/autoTrade.routes");
 const riskEngineRoutes = require("./routes/riskEngine.routes");
 const hedgingRoutes = require("./routes/hedging.routes");
+const strategyGeneratorRoutes = require(
+  "./routes/strategyGenerator.routes"
+);
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -69,6 +72,7 @@ app.use("/api/mobile", mobileControlRoutes);
 app.use("/api/auto-trade", autoTradeRoutes);
 app.use("/api/risk-engine", riskEngineRoutes);
 app.use("/api/hedging", hedgingRoutes);
+app.use("/api/strategy-generator", strategyGeneratorRoutes);
 
 app.get("/", (req, res) => {
   res.send("Auto Trading Backend running");
