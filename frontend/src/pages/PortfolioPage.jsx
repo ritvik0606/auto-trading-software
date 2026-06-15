@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { getDataSafe, visibleError } from "../services/api";
 import useApi from "../hooks/useApi";
+import useMarketStream from "../hooks/useMarketStream";
 import Loading from "../components/Loading";
 import ErrorAlert from "../components/ErrorAlert";
 import PageHeader from "../components/PageHeader";
@@ -53,8 +54,44 @@ export default function PortfolioPage() {
     };
   }, []);
 
+  const holdings = Array.isArray(data?.holdings) ? data.holdings : [];
+  const marketStream = useMarketStream(
+    holdings.map((holding) => holding.symbol)
+  );
+  const liveHoldings = holdings.map((holding) => {
+    const quote = marketStream.getQuote(holding.symbol);
+    const currentPrice = quote?.ltp ?? Number(holding.currentPrice || 0);
+    const quantity = Number(holding.quantity || 0);
+    const averagePrice = Number(holding.averagePrice || 0);
+    const direction = holding.side === "SELL" ? -1 : 1;
+    const investedValue = averagePrice * quantity;
+    const unrealizedPnL =
+      (currentPrice - averagePrice) * quantity * direction;
+
+    return {
+      ...holding,
+      currentPrice,
+      investedValue,
+      currentValue: currentPrice * quantity,
+      unrealizedPnL,
+      pnlPercent:
+        investedValue === 0 ? 0 : (unrealizedPnL / investedValue) * 100,
+      priceSource: quote?.source || null,
+    };
+  });
+  const baseSummary = data?.summary || {};
+  const liveUnrealizedPnL = liveHoldings.reduce(
+    (sum, holding) => sum + holding.unrealizedPnL,
+    0
+  );
+  const summary = {
+    ...baseSummary,
+    unrealizedPnL: liveUnrealizedPnL,
+    totalPnL:
+      Number(baseSummary.realizedPnL || 0) + liveUnrealizedPnL,
+  };
+
   if (loading) return <Loading label="Loading portfolio" />;
-  const summary = data?.summary || {};
 
   const columns = [
     { key: "symbol", label: "Symbol" },
@@ -71,7 +108,7 @@ export default function PortfolioPage() {
     <>
       <PageHeader eyebrow="Portfolio" title="Capital and holdings" description="Monitor exposure, allocation, and combined realized performance." />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
-      {data?.unavailable && <OfflineNotice />}
+      {(data?.unavailable || !marketStream.connected) && <OfflineNotice />}
       <Grid container spacing={2.5}>
         {[
           ["Total capital", money(summary.totalCapital), "primary"],
@@ -85,7 +122,7 @@ export default function PortfolioPage() {
         ))}
         <Grid size={{ xs: 12, lg: 8 }}>
           <SectionCard title="Holdings" subtitle={`${summary.totalHoldings || 0} active holdings`}>
-            <DataTable columns={columns} rows={data?.holdings || []} getRowId={(row) => `${row.exchange}-${row.symbol}`} />
+            <DataTable columns={columns} rows={liveHoldings} getRowId={(row) => `${row.exchange}-${row.symbol}`} />
           </SectionCard>
         </Grid>
         <Grid size={{ xs: 12, lg: 4 }}>

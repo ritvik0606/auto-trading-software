@@ -10,6 +10,7 @@ import StatCard from "../components/StatCard";
 import DataTable from "../components/DataTable";
 import SectionCard from "../components/SectionCard";
 import { money, pnlTone } from "../utils/format";
+import LiveMarketStrip from "../components/LiveMarketStrip";
 
 export default function TradeJournalWorkspacePage() {
   const [journalId, setJournalId] = useState("");
@@ -73,6 +74,7 @@ export default function TradeJournalWorkspacePage() {
   return (
     <>
       <PageHeader eyebrow="Review" title="Trade journal" description="Review closed paper trades, performance outcomes, and execution notes." />
+      <LiveMarketStrip />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
       {data?.unavailable && <OfflineNotice title="Journal data unavailable" />}
       {feedback && <Alert severity={feedback.severity} sx={{ mb: 3 }}>{feedback.message}</Alert>}

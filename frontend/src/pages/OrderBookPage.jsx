@@ -8,6 +8,8 @@ import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
 import DataTable from "../components/DataTable";
 import { dateTime, money } from "../utils/format";
+import useMarketStream from "../hooks/useMarketStream";
+import LiveMarketStrip from "../components/LiveMarketStrip";
 
 function mergeOrders(executionOrders, orders, paperTrades) {
   const rows = [];
@@ -73,8 +75,13 @@ export default function OrderBookPage() {
       partialError: visibleError(execution, orders, paperTrades),
     };
   }, []);
+  const storedRows = data?.rows || [];
+  const stream = useMarketStream(storedRows.map((row) => row.symbol));
+  const rows = storedRows.map((row) => ({
+    ...row,
+    marketPrice: stream.getQuote(row.symbol)?.ltp ?? null,
+  }));
   if (loading) return <Loading label="Loading order book" />;
-  const rows = data?.rows || [];
   const paperOrders = rows.filter((row) => row.mode === "PAPER").length;
   const blocked = rows.filter((row) => row.status === "BLOCKED").length;
   const columns = [
@@ -98,6 +105,13 @@ export default function OrderBookPage() {
       label: "Price",
       align: "right",
       render: (row) => (row.price == null ? "--" : money(row.price)),
+    },
+    {
+      key: "marketPrice",
+      label: "Live LTP",
+      align: "right",
+      render: (row) =>
+        row.marketPrice == null ? "--" : money(row.marketPrice),
     },
     {
       key: "status",
@@ -133,6 +147,7 @@ export default function OrderBookPage() {
         title="Order book"
         description="Combined order audit, execution analytics, and paper-trade entries."
       />
+      <LiveMarketStrip />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
       {data?.unavailable && <OfflineNotice title="Order book data unavailable" />}
       <Grid container spacing={2.5} mb={2.5}>
@@ -140,7 +155,7 @@ export default function OrderBookPage() {
           <StatCard label="Total entries" value={rows.length} />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard label="Paper mode" value={paperOrders} tone="success" />
+          <StatCard label="Paper entries" value={paperOrders} tone="success" badge={stream.connected ? "LIVE FEED" : "REST"} />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <StatCard label="Blocked safely" value={blocked} tone="warning" />

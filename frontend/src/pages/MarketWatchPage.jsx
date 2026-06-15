@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Box, Button, Chip, Grid, Typography } from "@mui/material";
 import { getDataSafe, visibleError } from "../services/api";
+import useMarketStream from "../hooks/useMarketStream";
 import ErrorAlert from "../components/ErrorAlert";
 import OfflineNotice from "../components/OfflineNotice";
 import PageHeader from "../components/PageHeader";
@@ -24,6 +25,11 @@ export default function MarketWatchPage() {
   const [error, setError] = useState("");
   const [offline, setOffline] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const marketStream = useMarketStream([
+    "NIFTY",
+    "BANKNIFTY",
+    "RELIANCE",
+  ]);
 
   const refresh = useCallback(async () => {
     const results = await Promise.all(
@@ -51,16 +57,28 @@ export default function MarketWatchPage() {
 
   useEffect(() => {
     refresh();
-    const timer = setInterval(refresh, 10000);
-    return () => clearInterval(timer);
   }, [refresh]);
+
+  const liveQuotes = {
+    nifty: marketStream.getQuote("NIFTY") || quotes.nifty,
+    bankNifty:
+      marketStream.getQuote("BANKNIFTY") || quotes.bankNifty,
+    reliance:
+      marketStream.getQuote("RELIANCE") || quotes.reliance,
+  };
+  const feedOffline = offline && !marketStream.connected;
+  const tickTime =
+    marketStream.getQuote("NIFTY")?.receivedAt ||
+    marketStream.getQuote("BANKNIFTY")?.receivedAt ||
+    marketStream.getQuote("RELIANCE")?.receivedAt ||
+    lastUpdated;
 
   return (
     <>
       <PageHeader
         eyebrow="Live market"
         title="Market watch"
-        description="Angel One LTP monitor with automatic refresh every 10 seconds."
+        description="Angel One Smart Stream LTP updates with automatic reconnect."
         action={
           <Button variant="outlined" onClick={refresh} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh quotes"}
@@ -68,18 +86,25 @@ export default function MarketWatchPage() {
         }
       />
       <ErrorAlert message={error} onRetry={refresh} />
-      {offline && <OfflineNotice />}
+      {feedOffline && <OfflineNotice />}
       <Grid container spacing={2.5}>
         {instruments.map((instrument) => {
-          const quote = quotes[instrument.key];
+          const quote = liveQuotes[instrument.key];
+          const isLive = quote?.source === "ANGEL_ONE_WEBSOCKET";
           return (
             <Grid key={instrument.key} size={{ xs: 12, md: 4 }}>
               <StatCard
                 label={instrument.label}
                 value={quote?.ltp == null ? "Data unavailable" : money(quote.ltp)}
-                detail={`${quote?.exchange || "NSE"} · ${quote?.symbol || instrument.label}`}
+                detail={`${quote?.exchange || "NSE"} | ${quote?.symbol || instrument.label}`}
                 tone={quote?.ltp == null ? "warning" : "primary"}
-                badge={quote?.ltp == null ? "OFFLINE" : "LIVE"}
+                badge={
+                  quote?.ltp == null
+                    ? "OFFLINE"
+                    : isLive
+                      ? "LIVE"
+                      : "REST"
+                }
               />
             </Grid>
           );
@@ -95,11 +120,15 @@ export default function MarketWatchPage() {
             >
               <Box>
                 <Typography color="text.secondary">Last refresh</Typography>
-                <Typography fontWeight={700}>{dateTime(lastUpdated)}</Typography>
+                <Typography fontWeight={700}>{dateTime(tickTime)}</Typography>
               </Box>
               <Chip
-                label={offline ? "Broker offline · Paper mode active" : "Market feed online"}
-                color={offline ? "warning" : "success"}
+                label={
+                  marketStream.connected
+                    ? "WebSocket feed online"
+                    : "Broker offline | Paper mode active"
+                }
+                color={marketStream.connected ? "success" : "warning"}
                 variant="outlined"
               />
             </Box>

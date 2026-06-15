@@ -18,6 +18,7 @@ export default function StrategyBuilderPage() {
     sellRsi: 45,
   });
   const [feedback, setFeedback] = useState(null);
+  const [candidates, setCandidates] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const update = (field) => (event) =>
     setForm((current) => ({ ...current, [field]: event.target.value }));
@@ -36,11 +37,14 @@ export default function StrategyBuilderPage() {
         style: form.style,
         risk: form.risk,
       });
+      const generated = Array.isArray(result?.candidates) ? result.candidates : [];
+      setCandidates(generated);
       setFeedback({
         severity: "success",
-        message: `Generated strategy ${result.strategyName || result.strategy_name || "saved"} using historical paper data.`,
+        message: `${generated.length} strategy candidates evaluated using historical paper data.`,
       });
     } catch (error) {
+      setCandidates([]);
       setFeedback({
         severity: error.isUnavailable ? "warning" : "error",
         message: error.isUnavailable
@@ -90,6 +94,27 @@ export default function StrategyBuilderPage() {
             <Typography variant="caption" color="warning.main" display="block" mt={2}>
               This score evaluates configuration structure only, not market performance.
             </Typography>
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12 }}>
+          <SectionCard title="Generated candidates" subtitle="Open AI Strategy Generator to save and rank full strategy profiles">
+            {candidates.length === 0 ? (
+              <Typography color="text.secondary" textAlign="center" py={4}>
+                No generated candidates available.
+              </Typography>
+            ) : (
+              <Grid container spacing={2}>
+                {candidates.map((candidate, index) => (
+                  <Grid key={candidate.strategyName || index} size={{ xs: 12, md: 4 }}>
+                    <StatCard
+                      label={candidate.strategyName || `Candidate ${index + 1}`}
+                      value={`${candidate.score ?? 0}/100`}
+                      tone="success"
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            )}
           </SectionCard>
         </Grid>
       </Grid>

@@ -14,6 +14,8 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
+import useMarketStream from "../hooks/useMarketStream";
+import LiveFeedStatus from "../components/LiveFeedStatus";
 
 const drawerWidth = 252;
 const navigationGroups = [
@@ -45,6 +47,8 @@ const navigationGroups = [
       ["Positions", "/positions", "PS"],
       ["Strategies", "/strategies", "ST"],
       ["Strategy Builder", "/strategy-builder", "SB"],
+      ["Multi Strategy", "/multi-strategy", "MS"],
+      ["Auto Trading", "/auto-trading", "AT"],
     ],
   },
   {
@@ -62,6 +66,9 @@ const navigationGroups = [
       ["Execution Analytics", "/execution-analytics", "EA"],
       ["Performance", "/performance", "PM"],
       ["AI Insights", "/ai-insights", "AI"],
+      ["AI Strategy Generator", "/ai-strategy", "AG"],
+      ["Backtesting Lab", "/backtesting-lab", "BT"],
+      ["Risk Engine", "/risk-engine", "RE"],
       ["Risk Dashboard", "/risk", "RK"],
     ],
   },
@@ -73,7 +80,12 @@ const navigationGroups = [
     ],
   },
 ];
-const navigation = navigationGroups.flatMap((group) => group.items);
+const safeNavigationGroups = Array.isArray(navigationGroups)
+  ? navigationGroups
+  : [];
+const navigation = safeNavigationGroups.flatMap((group) =>
+  Array.isArray(group?.items) ? group.items : []
+);
 
 function Sidebar({ onNavigate }) {
   return (
@@ -106,7 +118,7 @@ function Sidebar({ onNavigate }) {
       </Box>
       <Divider />
       <List sx={{ px: 1.5, py: 2, flex: 1, overflowY: "auto" }}>
-        {navigationGroups.map((group) => (
+        {safeNavigationGroups.map((group) => (
           <Box key={group.label} mb={1.5}>
             <Typography
               variant="caption"
@@ -117,7 +129,8 @@ function Sidebar({ onNavigate }) {
             >
               {group.label.toUpperCase()}
             </Typography>
-            {group.items.map(([label, path, marker]) => (
+            {(Array.isArray(group?.items) ? group.items : []).map(
+              ([label = "Page", path = "/dashboard", marker = "--"]) => (
               <ListItemButton
                 key={path}
                 component={NavLink}
@@ -148,7 +161,8 @@ function Sidebar({ onNavigate }) {
                   primaryTypographyProps={{ fontSize: 13, fontWeight: 650 }}
                 />
               </ListItemButton>
-            ))}
+              )
+            )}
           </Box>
         ))}
       </List>
@@ -176,8 +190,11 @@ function Sidebar({ onNavigate }) {
 export default function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const marketStream =
+    useMarketStream(["NIFTY", "BANKNIFTY", "RELIANCE"]) || {};
+  const pathname = location?.pathname || "/dashboard";
   const title =
-    navigation.find((item) => location.pathname.startsWith(item[1]))?.[0] ||
+    navigation.find((item) => pathname.startsWith(item?.[1] || ""))?.[0] ||
     "Dashboard";
 
   return (
@@ -205,13 +222,13 @@ export default function DashboardLayout() {
           <Typography fontWeight={700} sx={{ flex: 1 }}>
             {title}
           </Typography>
-          <Chip
-            size="small"
-            label="System online"
-            color="success"
-            variant="outlined"
-            sx={{ display: { xs: "none", sm: "flex" } }}
-          />
+          <Box sx={{ display: { xs: "none", sm: "block" } }}>
+            <LiveFeedStatus
+              connected={marketStream.connected}
+              state={marketStream.status?.state || "DISCONNECTED"}
+            />
+          </Box>
+          <Chip size="small" label="PAPER" color="primary" variant="outlined" />
           <Avatar
             sx={{
               width: 34,

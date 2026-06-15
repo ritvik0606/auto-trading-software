@@ -1,4 +1,5 @@
-import { Grid } from "@mui/material";
+import { Chip, Grid } from "@mui/material";
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -19,6 +20,8 @@ import ErrorAlert from "../components/ErrorAlert";
 import OfflineNotice from "../components/OfflineNotice";
 import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
+import LiveMarketStrip from "../components/LiveMarketStrip";
+import useMarketStream from "../hooks/useMarketStream";
 
 const axis = { fill: "#70859e", fontSize: 10 };
 const chartProps = {
@@ -26,6 +29,12 @@ const chartProps = {
 };
 
 export default function MultiChartDashboardPage() {
+  const stream = useMarketStream(["NIFTY", "BANKNIFTY", "RELIANCE"]);
+  const [intraday, setIntraday] = useState({
+    NIFTY: [],
+    BANKNIFTY: [],
+    RELIANCE: [],
+  });
   const { data, loading, error, reload } = useApi(async () => {
     const [daily, weekly, monthly, equity, drawdown] = await Promise.all([
       getDataSafe("/api/performance/daily", []),
@@ -44,15 +53,53 @@ export default function MultiChartDashboardPage() {
       partialError: visibleError(daily, weekly, monthly, equity, drawdown),
     };
   }, []);
+  useEffect(() => {
+    setIntraday((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const symbol of Object.keys(current)) {
+        const quote = stream.getQuote(symbol);
+        if (!quote?.receivedAt) continue;
+        const last = current[symbol][current[symbol].length - 1];
+        if (last?.timestamp === quote.receivedAt) continue;
+        next[symbol] = [
+          ...current[symbol],
+          { timestamp: quote.receivedAt, ltp: quote.ltp },
+        ].slice(-120);
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [stream.quotes]);
   if (loading) return <Loading label="Loading chart workspace" />;
   const tooltip = { background: "#101d2e", border: "1px solid #26364c", borderRadius: 10 };
 
   return (
     <>
       <PageHeader eyebrow="Workspace" title="Multi chart dashboard" description="Daily, weekly, monthly, equity, and drawdown views in one terminal." />
+      <LiveMarketStrip />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
       {data?.unavailable && <OfflineNotice title="Some chart data is unavailable" />}
       <Grid container spacing={2.5}>
+        {Object.entries(intraday).map(([symbol, points]) => (
+          <Grid key={symbol} size={{ xs: 12, lg: 4 }}>
+            <SectionCard
+              title={symbol}
+              subtitle="Live Angel One LTP"
+              action={<Chip size="small" label={stream.connected ? "LIVE" : "WAITING"} color={stream.connected ? "success" : "warning"} />}
+            >
+              <ResponsiveContainer width="100%" height={210}>
+                <LineChart data={points} {...chartProps}>
+                  <CartesianGrid stroke="rgba(143,163,187,.08)" vertical={false} />
+                  <XAxis dataKey="timestamp" hide />
+                  <YAxis tick={axis} domain={["auto", "auto"]} />
+                  <Tooltip contentStyle={tooltip} />
+                  <Line dataKey="ltp" stroke="#4de8c2" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </SectionCard>
+          </Grid>
+        ))}
         <Grid size={{ xs: 12, xl: 6 }}>
           <SectionCard title="Daily P&L">
             <ResponsiveContainer width="100%" height={280}><BarChart data={data?.daily || []} {...chartProps}><CartesianGrid stroke="rgba(143,163,187,.08)" vertical={false} /><XAxis dataKey="date" tick={axis} /><YAxis tick={axis} /><Tooltip contentStyle={tooltip} /><Bar dataKey="pnl" fill="#4de8c2" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer>

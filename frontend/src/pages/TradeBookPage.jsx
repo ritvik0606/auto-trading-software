@@ -8,6 +8,8 @@ import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
 import DataTable from "../components/DataTable";
 import { money, pnlTone } from "../utils/format";
+import useMarketStream from "../hooks/useMarketStream";
+import LiveMarketStrip from "../components/LiveMarketStrip";
 
 function mergeTrades(journal, paperTrades) {
   const notesByTrade = new Map(
@@ -18,6 +20,7 @@ function mergeTrades(journal, paperTrades) {
     return {
       id: trade.id,
       symbol: trade.symbol,
+      side: trade.tradeType,
       entry: trade.entryPrice,
       exit: trade.exitPrice,
       quantity: trade.quantity,
@@ -40,8 +43,24 @@ export default function TradeBookPage() {
       partialError: visibleError(journal, paperTrades),
     };
   }, []);
+  const storedRows = data?.rows || [];
+  const stream = useMarketStream(
+    storedRows.filter((row) => row.status === "OPEN").map((row) => row.symbol)
+  );
+  const rows = storedRows.map((row) => {
+    const livePrice = stream.getQuote(row.symbol)?.ltp;
+    if (row.status !== "OPEN" || livePrice == null) return row;
+    const direction = row.side === "SELL" ? -1 : 1;
+    return {
+      ...row,
+      livePrice,
+      pnl:
+        (livePrice - Number(row.entry || 0)) *
+        Number(row.quantity || 0) *
+        direction,
+    };
+  });
   if (loading) return <Loading label="Loading trade book" />;
-  const rows = data?.rows || [];
   const closed = rows.filter((row) => row.status === "CLOSED").length;
   const totalPnl = rows.reduce((sum, row) => sum + Number(row.pnl || 0), 0);
   const columns = [
@@ -58,6 +77,17 @@ export default function TradeBookPage() {
       label: "Exit",
       align: "right",
       render: (row) => (row.exit == null ? "--" : money(row.exit)),
+    },
+    {
+      key: "livePrice",
+      label: "Live LTP",
+      align: "right",
+      render: (row) =>
+        row.status === "OPEN"
+          ? row.livePrice == null
+            ? "--"
+            : money(row.livePrice)
+          : "--",
     },
     { key: "quantity", label: "Quantity", align: "right" },
     {
@@ -95,6 +125,7 @@ export default function TradeBookPage() {
         title="Trade book"
         description="Paper-trade lifecycle with journal notes and realized performance."
       />
+      <LiveMarketStrip />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
       {data?.unavailable && <OfflineNotice title="Trade book data unavailable" />}
       <Grid container spacing={2.5} mb={2.5}>
@@ -105,7 +136,7 @@ export default function TradeBookPage() {
           <StatCard label="Closed trades" value={closed} tone="secondary" />
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
-          <StatCard label="Total P&L" value={money(totalPnl)} tone={pnlTone(totalPnl)} />
+          <StatCard label="Total / live P&L" value={money(totalPnl)} tone={pnlTone(totalPnl)} badge={stream.connected ? "LIVE" : "REST"} />
         </Grid>
       </Grid>
       <DataTable columns={columns} rows={rows} emptyMessage="No trades available" />

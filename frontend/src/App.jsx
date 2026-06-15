@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardLayout from "./layout/DashboardLayout";
 import Loading from "./components/Loading";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
@@ -41,42 +42,58 @@ const DailyPnLMonitorPage = lazy(
   () => import("./pages/DailyPnLMonitorPage")
 );
 const HeatmapPage = lazy(() => import("./pages/HeatmapPage"));
+const AIStrategyGeneratorPage = lazy(
+  () => import("./pages/AIStrategyGeneratorPage")
+);
+const BacktestingLabPage = lazy(() => import("./pages/BacktestingLabPage"));
+const MultiStrategyEnginePage = lazy(
+  () => import("./pages/MultiStrategyEnginePage")
+);
+const AutoTradingPage = lazy(() => import("./pages/AutoTradingPage"));
+const RiskEnginePage = lazy(() => import("./pages/RiskEnginePage"));
 
 export default function App() {
   return (
-    <Suspense fallback={<Loading label="Loading dashboard" />}>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/market-watch" element={<MarketWatchPage />} />
-          <Route path="/option-chain" element={<OptionChainPage />} />
-          <Route path="/scanner" element={<AdvancedScannerPage />} />
-          <Route path="/heatmap" element={<HeatmapPage />} />
-          <Route path="/brokers" element={<BrokerManagementPage />} />
-          <Route path="/portfolio" element={<PortfolioPage />} />
-          <Route path="/holdings" element={<HoldingsPage />} />
-          <Route path="/funds" element={<FundsPage />} />
-          <Route path="/positions" element={<PositionsPage />} />
-          <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/order-book" element={<OrderBookPage />} />
-          <Route path="/trade-book" element={<TradeBookPage />} />
-          <Route path="/trade-journal" element={<TradeJournalWorkspacePage />} />
-          <Route path="/strategies" element={<StrategiesPage />} />
-          <Route path="/strategy-builder" element={<StrategyBuilderPage />} />
-          <Route path="/watchlist" element={<WatchlistPage />} />
-          <Route path="/risk" element={<RiskPage />} />
-          <Route path="/performance" element={<PerformancePage />} />
-          <Route path="/multi-chart" element={<MultiChartDashboardPage />} />
-          <Route path="/execution-analytics" element={<ExecutionAnalyticsPage />} />
-          <Route path="/portfolio-analytics" element={<PortfolioAnalyticsPage />} />
-          <Route path="/daily-pnl" element={<DailyPnLMonitorPage />} />
-          <Route path="/ai-insights" element={<AIInsightsPage />} />
-          <Route path="/mobile" element={<MobileControlPage />} />
-        </Route>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Suspense>
+    <AppErrorBoundary>
+      <Suspense fallback={<Loading label="Loading dashboard" />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<DashboardLayout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/market-watch" element={<MarketWatchPage />} />
+            <Route path="/option-chain" element={<OptionChainPage />} />
+            <Route path="/scanner" element={<AdvancedScannerPage />} />
+            <Route path="/heatmap" element={<HeatmapPage />} />
+            <Route path="/brokers" element={<BrokerManagementPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/holdings" element={<HoldingsPage />} />
+            <Route path="/funds" element={<FundsPage />} />
+            <Route path="/positions" element={<PositionsPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/order-book" element={<OrderBookPage />} />
+            <Route path="/trade-book" element={<TradeBookPage />} />
+            <Route path="/trade-journal" element={<TradeJournalWorkspacePage />} />
+            <Route path="/strategies" element={<StrategiesPage />} />
+            <Route path="/strategy-builder" element={<StrategyBuilderPage />} />
+            <Route path="/ai-strategy" element={<AIStrategyGeneratorPage />} />
+            <Route path="/backtesting-lab" element={<BacktestingLabPage />} />
+            <Route path="/multi-strategy" element={<MultiStrategyEnginePage />} />
+            <Route path="/auto-trading" element={<AutoTradingPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
+            <Route path="/risk" element={<RiskPage />} />
+            <Route path="/risk-engine" element={<RiskEnginePage />} />
+            <Route path="/performance" element={<PerformancePage />} />
+            <Route path="/multi-chart" element={<MultiChartDashboardPage />} />
+            <Route path="/execution-analytics" element={<ExecutionAnalyticsPage />} />
+            <Route path="/portfolio-analytics" element={<PortfolioAnalyticsPage />} />
+            <Route path="/daily-pnl" element={<DailyPnLMonitorPage />} />
+            <Route path="/ai-insights" element={<AIInsightsPage />} />
+            <Route path="/mobile" element={<MobileControlPage />} />
+          </Route>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Suspense>
+    </AppErrorBoundary>
   );
 }

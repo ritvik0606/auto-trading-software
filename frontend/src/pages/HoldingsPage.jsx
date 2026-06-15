@@ -8,26 +8,24 @@ import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
 import DataTable from "../components/DataTable";
 import { money, percent, pnlTone } from "../utils/format";
+import useMarketStream from "../hooks/useMarketStream";
+import LiveMarketStrip from "../components/LiveMarketStrip";
+import { applyLivePrice, sumBy } from "../utils/liveMarket";
 
 export default function HoldingsPage() {
   const { data, loading, error, reload } = useApi(
     () => getDataSafe("/api/portfolio/holdings", []),
     []
   );
+  const storedRows = Array.isArray(data?.data) ? data.data : [];
+  const stream = useMarketStream(storedRows.map((row) => row.symbol));
+  const rows = storedRows.map((row) =>
+    applyLivePrice(row, stream.getQuote(row.symbol))
+  );
   if (loading) return <Loading label="Loading holdings" />;
-  const rows = Array.isArray(data?.data) ? data.data : [];
-  const investedValue = rows.reduce(
-    (sum, row) => sum + Number(row.investedValue || 0),
-    0
-  );
-  const currentValue = rows.reduce(
-    (sum, row) => sum + Number(row.currentValue || 0),
-    0
-  );
-  const pnl = rows.reduce(
-    (sum, row) => sum + Number(row.unrealizedPnL || 0),
-    0
-  );
+  const investedValue = sumBy(rows, "investedValue");
+  const currentValue = sumBy(rows, "currentValue");
+  const pnl = sumBy(rows, "unrealizedPnL");
   const columns = [
     { key: "symbol", label: "Symbol" },
     { key: "exchange", label: "Exchange" },
@@ -76,8 +74,9 @@ export default function HoldingsPage() {
         title="Holdings"
         description="Current paper holdings with invested value and mark-to-market returns."
       />
+      <LiveMarketStrip />
       <ErrorAlert message={error} onRetry={reload} />
-      {data?.unavailable && <OfflineNotice title="Holdings data unavailable" />}
+      {(data?.unavailable || !stream.connected) && <OfflineNotice title="Live holdings feed unavailable" />}
       <Grid container spacing={2.5} mb={2.5}>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <StatCard label="Holdings" value={rows.length} />
@@ -86,7 +85,7 @@ export default function HoldingsPage() {
           <StatCard label="Invested value" value={money(investedValue)} tone="secondary" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <StatCard label="Current value" value={money(currentValue)} tone="primary" />
+          <StatCard label="Current value" value={money(currentValue)} tone="primary" badge={stream.connected ? "LIVE" : "REST"} />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <StatCard label="Unrealized P&L" value={money(pnl)} tone={pnlTone(pnl)} />

@@ -10,6 +10,9 @@ import StatCard from "../components/StatCard";
 import DataTable from "../components/DataTable";
 import SectionCard from "../components/SectionCard";
 import { money, percent, pnlTone } from "../utils/format";
+import useMarketStream from "../hooks/useMarketStream";
+import LiveMarketStrip from "../components/LiveMarketStrip";
+import { applyLivePrice, sumBy } from "../utils/liveMarket";
 
 const colors = ["#4de8c2", "#8b7cff", "#ffbd59", "#58a6ff", "#ff6577"];
 
@@ -32,6 +35,18 @@ export default function PortfolioAnalyticsPage() {
       partialError: visibleError(summary, pnl, allocation, analytics, holdings),
     };
   }, []);
+  const holdings = Array.isArray(data?.holdings) ? data.holdings : [];
+  const stream = useMarketStream(holdings.map((holding) => holding.symbol));
+  const liveHoldings = holdings.map((holding) =>
+    applyLivePrice(holding, stream.getQuote(holding.symbol))
+  );
+  const liveExposure = sumBy(liveHoldings, "currentValue");
+  const liveUnrealized = sumBy(liveHoldings, "unrealizedPnL");
+  const totalPnl = Number(data?.pnl?.realizedPnL || 0) + liveUnrealized;
+  const averageReturn =
+    liveHoldings.length === 0
+      ? 0
+      : sumBy(liveHoldings, "pnlPercent") / liveHoldings.length;
   if (loading) return <Loading label="Loading portfolio analytics" />;
   const columns = [
     { key: "symbol", label: "Symbol" },
@@ -44,13 +59,14 @@ export default function PortfolioAnalyticsPage() {
   return (
     <>
       <PageHeader eyebrow="Allocation" title="Portfolio analytics" description="Exposure, return concentration, winners, losers, and capital distribution." />
+      <LiveMarketStrip />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
       {data?.unavailable && <OfflineNotice title="Portfolio analytics unavailable" />}
       <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Total exposure" value={money(data?.analytics?.totalExposure)} /></Grid>
-        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Total P&L" value={money(data?.pnl?.totalPnL)} tone={pnlTone(data?.pnl?.totalPnL)} /></Grid>
-        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Winning positions" value={data?.pnl?.winningPositions ?? 0} tone="success" /></Grid>
-        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Average return" value={percent(data?.analytics?.averagePnLPercent)} tone="secondary" /></Grid>
+        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Live exposure" value={money(liveExposure)} badge={stream.connected ? "LIVE" : "REST"} /></Grid>
+        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Total P&L" value={money(totalPnl)} tone={pnlTone(totalPnl)} /></Grid>
+        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Winning positions" value={liveHoldings.filter((item) => item.unrealizedPnL > 0).length} tone="success" /></Grid>
+        <Grid size={{ xs: 12, sm: 3 }}><StatCard label="Average return" value={percent(averageReturn)} tone="secondary" /></Grid>
         <Grid size={{ xs: 12, lg: 5 }}>
           <SectionCard title="Capital allocation">
             <ResponsiveContainer width="100%" height={300}><PieChart><Pie data={data?.allocation || []} dataKey="allocationPercent" nameKey="symbol" innerRadius={70} outerRadius={105}>{(data?.allocation || []).map((item, index) => <Cell key={item.symbol} fill={colors[index % colors.length]} />)}</Pie><Tooltip contentStyle={{ background: "#101d2e", border: "1px solid #26364c" }} /></PieChart></ResponsiveContainer>
@@ -58,7 +74,7 @@ export default function PortfolioAnalyticsPage() {
         </Grid>
         <Grid size={{ xs: 12, lg: 7 }}>
           <SectionCard title="Holding returns">
-            <DataTable columns={columns} rows={data?.holdings || []} getRowId={(row) => `${row.exchange}-${row.symbol}`} />
+            <DataTable columns={columns} rows={liveHoldings} getRowId={(row) => `${row.exchange}-${row.symbol}`} />
           </SectionCard>
         </Grid>
       </Grid>

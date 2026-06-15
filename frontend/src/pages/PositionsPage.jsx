@@ -1,6 +1,7 @@
 import { Chip, Grid } from "@mui/material";
 import { getDataSafe } from "../services/api";
 import useApi from "../hooks/useApi";
+import useMarketStream from "../hooks/useMarketStream";
 import Loading from "../components/Loading";
 import ErrorAlert from "../components/ErrorAlert";
 import PageHeader from "../components/PageHeader";
@@ -15,8 +16,36 @@ export default function PositionsPage() {
     []
   );
 
+  const storedRows = Array.isArray(data?.data) ? data.data : [];
+  const marketStream = useMarketStream(
+    storedRows
+      .filter((row) => row.status === "OPEN")
+      .map((row) => row.symbol)
+  );
+  const rows = storedRows.map((row) => {
+    if (row.status !== "OPEN") {
+      return row;
+    }
+
+    const quote = marketStream.getQuote(row.symbol);
+    if (!quote) {
+      return row;
+    }
+
+    const currentPrice = quote.ltp;
+    const quantity = Number(row.quantity || 0);
+    const averagePrice = Number(row.averagePrice || 0);
+    const direction = row.side === "SELL" ? -1 : 1;
+    return {
+      ...row,
+      currentPrice,
+      unrealizedPnl:
+        (currentPrice - averagePrice) * quantity * direction,
+      totalPositionValue: currentPrice * quantity,
+      priceSource: quote.source,
+    };
+  });
   if (loading) return <Loading label="Loading positions" />;
-  const rows = Array.isArray(data?.data) ? data.data : [];
   const open = rows.filter((row) => row.status === "OPEN");
   const unrealized = open.reduce((sum, row) => sum + Number(row.unrealizedPnl || 0), 0);
   const value = open.reduce(
@@ -38,7 +67,15 @@ export default function PositionsPage() {
     <>
       <PageHeader eyebrow="Execution" title="Positions" description="Track open and closed paper positions with mark-to-market performance." />
       <ErrorAlert message={error} onRetry={reload} />
-      {data?.unavailable && <OfflineNotice title="Position data unavailable" />}
+      {(data?.unavailable || !marketStream.connected) && (
+        <OfflineNotice
+          title={
+            data?.unavailable
+              ? "Position data unavailable"
+              : "Live MTM unavailable"
+          }
+        />
+      )}
       <Grid container spacing={2.5} mb={2.5}>
         <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Open positions" value={open.length} /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Position value" value={money(value)} tone="secondary" /></Grid>

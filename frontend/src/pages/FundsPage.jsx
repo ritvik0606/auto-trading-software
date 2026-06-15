@@ -8,6 +8,9 @@ import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import { money, percent } from "../utils/format";
+import useMarketStream from "../hooks/useMarketStream";
+import LiveMarketStrip from "../components/LiveMarketStrip";
+import { applyLivePrice, sumBy } from "../utils/liveMarket";
 
 const portfolioFallback = {
   totalCapital: 100000,
@@ -17,7 +20,7 @@ const portfolioFallback = {
 
 export default function FundsPage() {
   const { data, loading, error, reload } = useApi(async () => {
-    const [portfolio, dashboard, settings] = await Promise.all([
+    const [portfolio, dashboard, settings, holdings] = await Promise.all([
       getDataSafe("/api/portfolio/summary", portfolioFallback),
       getDataSafe("/api/risk/dashboard", {
         maxDailyLoss: 0,
@@ -29,24 +32,29 @@ export default function FundsPage() {
         maxDailyLoss: 2000,
         maxTradesPerDay: 5,
       }),
+      getDataSafe("/api/portfolio/holdings", []),
     ]);
     return {
       portfolio: portfolio.data,
       dashboard: dashboard.data,
       settings: settings.data,
+      holdings: holdings.data,
       unavailable:
-        portfolio.unavailable || dashboard.unavailable || settings.unavailable,
-      partialError: visibleError(portfolio, dashboard, settings),
+        portfolio.unavailable || dashboard.unavailable || settings.unavailable || holdings.unavailable,
+      partialError: visibleError(portfolio, dashboard, settings, holdings),
     };
   }, []);
+  const holdings = Array.isArray(data?.holdings) ? data.holdings : [];
+  const stream = useMarketStream(holdings.map((holding) => holding.symbol));
+  const liveHoldings = holdings.map((holding) =>
+    applyLivePrice(holding, stream.getQuote(holding.symbol))
+  );
   if (loading) return <Loading label="Loading funds and margin" />;
   const portfolio = { ...portfolioFallback, ...(data?.portfolio || {}) };
   const risk = data?.dashboard || {};
   const settings = data?.settings || {};
-  const marginPercent =
-    Number(portfolio.totalCapital) === 0
-      ? 0
-      : (Number(portfolio.usedCapital) / Number(portfolio.totalCapital)) * 100;
+  const liveExposure = sumBy(liveHoldings, "currentValue");
+  const liveMtm = sumBy(liveHoldings, "unrealizedPnL");
 
   return (
     <>
@@ -55,6 +63,7 @@ export default function FundsPage() {
         title="Funds & margin"
         description="Available paper capital, deployed margin, and configured risk limits."
       />
+      <LiveMarketStrip />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
       {data?.unavailable && <OfflineNotice title="Funds data unavailable" />}
       <Grid container spacing={2.5}>
@@ -62,13 +71,13 @@ export default function FundsPage() {
           <StatCard label="Total capital" value={money(portfolio.totalCapital)} />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, xl: 3 }}>
-          <StatCard label="Used capital" value={money(portfolio.usedCapital)} tone="secondary" />
+          <StatCard label="Live exposure" value={money(liveExposure)} tone="secondary" badge={stream.connected ? "LIVE" : "REST"} />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, xl: 3 }}>
           <StatCard label="Available capital" value={money(portfolio.availableCapital)} tone="success" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, xl: 3 }}>
-          <StatCard label="Margin used" value={percent(marginPercent)} tone="warning" />
+          <StatCard label="Open MTM" value={money(liveMtm)} tone={liveMtm < 0 ? "error" : "success"} />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <StatCard

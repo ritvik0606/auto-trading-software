@@ -8,7 +8,6 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  getData,
   getDataSafe,
   postData,
   visibleError,
@@ -42,9 +41,9 @@ function brokerLabel(broker) {
 export default function BrokerManagementPage() {
   const [actionState, setActionState] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [locallyDisconnected, setLocallyDisconnected] = useState(false);
   const { data, loading, error, reload } = useApi(async () => {
-    const [status, metrics, history] = await Promise.all([
+    const [status, metrics, history, angelSession, paytmSession] =
+      await Promise.all([
       getDataSafe("/api/broker-failover/status", fallbackStatus),
       getDataSafe("/api/broker-failover/metrics", {
         failures: 0,
@@ -55,13 +54,36 @@ export default function BrokerManagementPage() {
         mode: "PAPER_ONLY",
       }),
       getDataSafe("/api/broker-failover/history", []),
-    ]);
+      getDataSafe("/api/broker/angel/status", {
+        broker: "ANGEL_ONE",
+        connected: false,
+        sessionValid: false,
+      }),
+      getDataSafe("/api/broker/paytm/status", {
+        broker: "PAYTM_MONEY",
+        connected: false,
+        sessionValid: false,
+      }),
+      ]);
     return {
       status: status.data,
       metrics: metrics.data,
       history: history.data,
-      unavailable: status.unavailable || metrics.unavailable || history.unavailable,
-      partialError: visibleError(status, metrics, history),
+      angelSession: angelSession.data,
+      paytmSession: paytmSession.data,
+      unavailable:
+        status.unavailable ||
+        metrics.unavailable ||
+        history.unavailable ||
+        angelSession.unavailable ||
+        paytmSession.unavailable,
+      partialError: visibleError(
+        status,
+        metrics,
+        history,
+        angelSession,
+        paytmSession
+      ),
     };
   }, []);
 
@@ -70,26 +92,26 @@ export default function BrokerManagementPage() {
     setActionState(null);
     try {
       if (action === "CONNECT_ANGEL") {
-        await getData("/api/broker/angel/connect");
-        setLocallyDisconnected(false);
+        await postData("/api/broker/angel/connect");
         setActionState({
           severity: "success",
           message: "Angel One connection request completed.",
         });
         await reload();
       } else if (action === "CONNECT_PAYTM") {
+        await postData("/api/broker/paytm/connect");
         setActionState({
-          severity: "warning",
-          message:
-            "Paytm Money connect API is not available. Paper trading mode remains active.",
+          severity: "success",
+          message: "Paytm Money connection request completed.",
         });
+        await reload();
       } else if (action === "DISCONNECT") {
-        setLocallyDisconnected(true);
+        await postData("/api/broker/disconnect");
         setActionState({
-          severity: "warning",
-          message:
-            "No broker disconnect API is available. This panel is marked disconnected locally; backend sessions are unchanged.",
+          severity: "success",
+          message: "Broker sessions disconnected.",
         });
+        await reload();
       } else {
         const result = await postData("/api/broker-failover/switch", {
           broker: action,
@@ -115,10 +137,16 @@ export default function BrokerManagementPage() {
   if (loading) return <Loading label="Checking broker connectivity" />;
   const status = { ...fallbackStatus, ...(data?.status || {}) };
   const metrics = data?.metrics || {};
-  const angel = status.brokers?.ANGEL_ONE || fallbackStatus.brokers.ANGEL_ONE;
-  const paytm = status.brokers?.PAYTM_MONEY || fallbackStatus.brokers.PAYTM_MONEY;
-  const angelConnected = angel.healthy && !locallyDisconnected;
-  const paytmConnected = paytm.healthy && !locallyDisconnected;
+  const angel =
+    data?.angelSession ||
+    status.brokers?.ANGEL_ONE ||
+    fallbackStatus.brokers.ANGEL_ONE;
+  const paytm =
+    data?.paytmSession ||
+    status.brokers?.PAYTM_MONEY ||
+    fallbackStatus.brokers.PAYTM_MONEY;
+  const angelConnected = angel.connected ?? angel.healthy;
+  const paytmConnected = paytm.connected ?? paytm.healthy;
   const history = Array.isArray(data?.history) ? data.history : [];
   const historyColumns = [
     { key: "id", label: "Event" },
@@ -214,7 +242,12 @@ export default function BrokerManagementPage() {
                       Session: {broker.sessionValid ? "Valid" : "Unavailable"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Last login/check: {dateTime(broker.checkedAt)}
+                      Last login/check:{" "}
+                      {dateTime(
+                        broker.lastLoginAt ||
+                          broker.lastCheckedAt ||
+                          broker.checkedAt
+                      )}
                     </Typography>
                     {broker.reason && (
                       <Typography variant="caption" color="warning.main" display="block" mt={1}>

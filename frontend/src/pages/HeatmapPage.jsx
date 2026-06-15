@@ -8,6 +8,8 @@ import PageHeader from "../components/PageHeader";
 import SectionCard from "../components/SectionCard";
 import StatCard from "../components/StatCard";
 import { percent } from "../utils/format";
+import useMarketStream from "../hooks/useMarketStream";
+import LiveFeedStatus from "../components/LiveFeedStatus";
 
 function cellColor(change) {
   if (change == null) return "rgba(143,163,187,.08)";
@@ -22,10 +24,19 @@ export default function HeatmapPage() {
     () => getDataSafe("/api/scanner/nifty50", { count: 0, items: [] }),
     []
   );
-  if (loading) return <Loading label="Building market heatmap" />;
   const items = data?.data?.items || [];
-  const gainers = items.filter((item) => Number(item.changePercent) > 0).length;
-  const losers = items.filter((item) => Number(item.changePercent) < 0).length;
+  const stream = useMarketStream(items.map((item) => item.symbol));
+  const liveItems = items.map((item) => {
+    const quote = stream.getQuote(item.symbol);
+    return {
+      ...item,
+      ltp: quote?.ltp ?? item.ltp,
+      live: Boolean(quote),
+    };
+  });
+  if (loading) return <Loading label="Building market heatmap" />;
+  const gainers = liveItems.filter((item) => Number(item.changePercent) > 0).length;
+  const losers = liveItems.filter((item) => Number(item.changePercent) < 0).length;
 
   return (
     <>
@@ -33,12 +44,12 @@ export default function HeatmapPage() {
         eyebrow="Breadth"
         title="Market heatmap"
         description="Nifty 50 color map using scanner change percentages and trend state."
-        action={<Button variant="outlined" onClick={reload}>Refresh heatmap</Button>}
+        action={<Box display="flex" gap={1}><LiveFeedStatus connected={stream.connected} state={stream.status.state} /><Button variant="outlined" onClick={reload}>Refresh</Button></Box>}
       />
       <ErrorAlert message={error} onRetry={reload} />
       {data?.unavailable && <OfflineNotice title="Heatmap market data unavailable" />}
       <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Symbols" value={items.length} /></Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Symbols" value={liveItems.length} /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Gainers" value={gainers} tone="success" /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Losers" value={losers} tone="error" /></Grid>
         <Grid size={{ xs: 12 }}>
@@ -55,7 +66,7 @@ export default function HeatmapPage() {
                 gap: 1,
               }}
             >
-              {items.map((item) => (
+              {liveItems.map((item) => (
                 <Box
                   key={item.symbol}
                   sx={{
@@ -70,11 +81,14 @@ export default function HeatmapPage() {
                   <Typography variant="h6" mt={0.5}>
                     {item.changePercent == null ? "--" : percent(item.changePercent)}
                   </Typography>
-                  <Typography variant="caption">{item.trend}</Typography>
+                  <Box display="flex" justifyContent="space-between" gap={1}>
+                    <Typography variant="caption">{item.trend}</Typography>
+                    <Typography variant="caption">{item.ltp ?? "--"}</Typography>
+                  </Box>
                 </Box>
               ))}
             </Box>
-            {items.length === 0 && (
+            {liveItems.length === 0 && (
               <Typography color="text.secondary" textAlign="center" py={7}>
                 Data unavailable
               </Typography>

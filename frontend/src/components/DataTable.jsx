@@ -17,7 +17,7 @@ export default function DataTable({
 }) {
   return (
     <TableContainer component={Paper}>
-      <Table>
+      <Table sx={{ minWidth: { xs: 720, md: "100%" } }}>
         <TableHead>
           <TableRow>
             {columns.map((column) => (
