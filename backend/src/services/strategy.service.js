@@ -102,6 +102,10 @@ async function executeCycle(runner) {
 }
 
 async function startStrategy(input) {
+  const {
+    assertTradingAllowed,
+  } = require("./killSwitch.service");
+  await assertTradingAllowed();
   const symbol = normalizeSymbol(input.symbol);
   const strategy = normalizeStrategy(input.strategy);
 

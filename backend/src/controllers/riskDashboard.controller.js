@@ -62,7 +62,7 @@ exports.updateRules = async (req, res) => {
 
 exports.killSwitch = async (req, res) => {
   try {
-    res.json({ success: true, data: await activateKillSwitch() });
+    res.json({ success: true, data: await activateKillSwitch(req.body) });
   } catch (error) {
     sendRiskDashboardError(res, error);
   }

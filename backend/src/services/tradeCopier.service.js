@@ -330,6 +330,10 @@ async function copyTradeForFollower(group, follower, masterTrade) {
       return { status: "DUPLICATE_SKIPPED" };
     }
 
+    const {
+      assertTradingAllowed,
+    } = require("./killSwitch.service");
+    await assertTradingAllowed();
     const direction = masterTrade.trade_type === "BUY" ? 1 : -1;
     const pnl =
       masterTrade.status === "CLOSED"

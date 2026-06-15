@@ -371,7 +371,19 @@ async function evaluateRisk() {
   let stoppedRunners = [];
 
   if (breach && !config.riskLocked) {
-    stoppedRunners = await lockRiskEngine(breach);
+    if (breach.type === "DAILY_LOSS_LIMIT") {
+      const {
+        activateForDailyLoss,
+      } = require("./killSwitch.service");
+      const status = await activateForDailyLoss({
+        dailyLoss: Math.max(-metrics.dailyPnL, 0),
+        dailyLossLimit: config.dailyLossLimit,
+        autoRecovery: true,
+      });
+      stoppedRunners = status.active ? ["MASTER_KILL_SWITCH"] : [];
+    } else {
+      stoppedRunners = await lockRiskEngine(breach);
+    }
   }
 
   const currentConfig =
@@ -404,6 +416,10 @@ async function evaluateRisk() {
 }
 
 async function validateNewTrade({ quantity, entryPrice }) {
+  const {
+    assertTradingAllowed,
+  } = require("./killSwitch.service");
+  await assertTradingAllowed();
   const status = await evaluateRisk();
   if (!status.tradingAllowed) {
     throw new RiskEngineError(
@@ -422,76 +438,20 @@ async function validateNewTrade({ quantity, entryPrice }) {
   return status;
 }
 
-async function activateKillSwitch() {
-  await ensureSchema();
-  await pool.query(
-    `UPDATE risk_engine_config
-     SET risk_locked = TRUE,
-         kill_switch_active = TRUE,
-         lock_reason = 'Emergency kill switch is active',
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = 1`
-  );
-  await pool.query(
-    `INSERT INTO risk_rules (id, kill_switch_active, orders_disabled)
-     VALUES (1, TRUE, TRUE)
-     ON CONFLICT (id)
-     DO UPDATE SET
-       kill_switch_active = TRUE,
-       orders_disabled = TRUE,
-       updated_at = CURRENT_TIMESTAMP`
-  );
-  const stoppedAutoTradeRunners = stopAutoTrading();
-  const { stopAllStrategies } = require("./strategy.service");
-  const stoppedLegacyStrategies = stopAllStrategies();
-  const { emergencyCloseAllPaperTrades } = require("./paperTrade.service");
-  const closedPaperTrades = await emergencyCloseAllPaperTrades();
-
-  await recordEvent(
-    "KILL_SWITCH",
-    "CRITICAL",
-    "Emergency kill switch activated",
-    {
-      stoppedAutoTradeRunners: stoppedAutoTradeRunners.length,
-      stoppedLegacyStrategies: stoppedLegacyStrategies.length,
-      closedPaperTrades: closedPaperTrades.length,
-    }
-  );
-
-  return {
-    mode: "PAPER_ONLY",
-    killSwitchActive: true,
-    riskLocked: true,
-    stoppedAutoTradeRunners,
-    stoppedLegacyStrategies,
-    closedPaperTrades,
-  };
+async function activateKillSwitch(input = {}) {
+  const { activate } = require("./killSwitch.service");
+  return activate(input);
 }
 
-async function unlockRiskEngine() {
-  await ensureSchema();
-  const result = await pool.query(
-    `UPDATE risk_engine_config
-     SET risk_locked = FALSE,
-         kill_switch_active = FALSE,
-         lock_reason = NULL,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = 1
-     RETURNING *`
-  );
-  await pool.query(
-    `UPDATE risk_rules
-     SET kill_switch_active = FALSE,
-         orders_disabled = FALSE,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = 1`
-  );
+async function unlockRiskEngine(input = {}) {
+  const { deactivate } = require("./killSwitch.service");
+  const status = await deactivate(input);
   await recordEvent(
     "RISK_UNLOCKED",
     "WARNING",
     "Risk engine manually unlocked"
   );
-  return mapConfig(result.rows[0]);
+  return status;
 }
 
 async function getEvents() {
@@ -514,6 +474,7 @@ async function getEvents() {
 
 module.exports = {
   RiskEngineError,
+  ensureSchema,
   calculatePnlPath,
   findBreach,
   getConfig,

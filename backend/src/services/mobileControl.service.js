@@ -9,10 +9,7 @@ const {
   pauseStrategy,
   stopStrategy,
 } = require("./multiStrategy.service");
-const {
-  activateKillSwitch,
-  getRiskStatus,
-} = require("./riskDashboard.service");
+const { getRiskStatus } = require("./riskDashboard.service");
 
 const SUPPORTED_COMMANDS = new Set([
   "START_STRATEGY",
@@ -258,9 +255,12 @@ async function executeInternalCommand(commandName, commandData) {
     case "RESUME_ALL":
       return resumeAllStrategies();
     case "KILL_SWITCH": {
-      const multiStrategies = await pauseAllStrategies();
-      const killSwitch = await activateKillSwitch();
-      return { ...killSwitch, multiStrategies };
+      const { activate } = require("./killSwitch.service");
+      return activate({
+        confirmation: commandData.confirmation,
+        reason: "Mobile control emergency command",
+        autoRecovery: commandData.autoRecovery === true,
+      });
     }
     default:
       throw new MobileControlError("Unsupported command", 400);

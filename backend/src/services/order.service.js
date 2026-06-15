@@ -155,6 +155,18 @@ async function placeAngelOrderPlaceholder() {
 async function placeOrder(input) {
   const order = normalizeOrderInput(input);
   const {
+    assertTradingAllowed,
+  } = require("./killSwitch.service");
+  try {
+    await assertTradingAllowed();
+  } catch (error) {
+    const message = error.message || "Master kill switch is active";
+    return {
+      message,
+      order: await saveBlockedOrder(order, "PAPER", message),
+    };
+  }
+  const {
     areNewOrdersDisabled,
   } = require("./riskDashboard.service");
 

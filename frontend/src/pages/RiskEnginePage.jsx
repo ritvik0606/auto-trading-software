@@ -148,10 +148,10 @@ export default function RiskEnginePage() {
               <Typography color="text.secondary">
                 Kill switch stops auto-trading runners, blocks new paper trades, and closes open paper positions.
               </Typography>
-              <Button color="error" variant="contained" disabled={busy || status.killSwitchActive} onClick={() => runAction("/api/risk-engine/kill-switch", {}, "Emergency kill switch activated.")}>
+              <Button color="error" variant="contained" disabled={busy || status.killSwitchActive} onClick={() => runAction("/api/risk-engine/kill-switch", { confirmation: "ACTIVATE", reason: "Risk Engine dashboard activation" }, "Emergency kill switch activated.")}>
                 Activate Kill Switch
               </Button>
-              <Button color="warning" variant="outlined" disabled={busy || (!status.riskLocked && !status.killSwitchActive)} onClick={() => runAction("/api/risk-engine/unlock", {}, "Risk engine unlocked.")}>
+              <Button color="warning" variant="outlined" disabled={busy || (!status.riskLocked && !status.killSwitchActive)} onClick={() => runAction("/api/risk-engine/unlock", { confirmation: "DEACTIVATE" }, "Risk engine unlocked.")}>
                 Unlock Risk Engine
               </Button>
               <Typography variant="caption" color="warning.main">

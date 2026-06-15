@@ -73,6 +73,7 @@ const navigationGroups = [
       ["AI Strategy Generator", "/ai-strategy", "AG"],
       ["Backtesting Lab", "/backtesting-lab", "BT"],
       ["Risk Engine", "/risk-engine", "RE"],
+      ["Master Kill Switch", "/kill-switch", "KS"],
       ["Risk Dashboard", "/risk", "RK"],
     ],
   },

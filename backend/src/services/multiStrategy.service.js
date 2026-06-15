@@ -282,6 +282,10 @@ function createRunner(row) {
 }
 
 async function startStrategy(id) {
+  const {
+    assertTradingAllowed,
+  } = require("./killSwitch.service");
+  await assertTradingAllowed();
   const strategyId = parseId(id);
   const client = await pool.connect();
 
@@ -392,6 +396,21 @@ async function stopStrategy(id) {
   return setStrategyStatus(id, "STOPPED");
 }
 
+async function stopAllStrategies() {
+  for (const runner of runners.values()) {
+    clearInterval(runner.timer);
+  }
+  runners.clear();
+  const result = await pool.query(
+    `UPDATE multi_strategies
+     SET status = 'STOPPED',
+         updated_at = CURRENT_TIMESTAMP
+     WHERE status IN ('ACTIVE', 'PAUSED')
+     RETURNING *`
+  );
+  return result.rows.map(mapStrategy);
+}
+
 async function getStrategies(activeOnly = false) {
   const result = await pool.query(
     `SELECT *
@@ -472,6 +491,7 @@ module.exports = {
   startStrategy,
   pauseStrategy,
   stopStrategy,
+  stopAllStrategies,
   getStrategies,
   getStrategyPerformance,
 };

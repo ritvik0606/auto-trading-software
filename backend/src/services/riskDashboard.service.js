@@ -350,29 +350,9 @@ async function areNewOrdersDisabled() {
   return rules.ordersDisabled || rules.killSwitchActive;
 }
 
-async function activateKillSwitch() {
-  await pool.query(
-    `INSERT INTO risk_rules (id, kill_switch_active, orders_disabled)
-     VALUES (1, TRUE, TRUE)
-     ON CONFLICT (id)
-     DO UPDATE SET
-       kill_switch_active = TRUE,
-       orders_disabled = TRUE,
-       updated_at = CURRENT_TIMESTAMP`
-  );
-
-  const { stopAllStrategies } = require("./strategy.service");
-  const { emergencyCloseAllPaperTrades } = require("./paperTrade.service");
-  const stoppedStrategies = stopAllStrategies();
-  const closedTrades = await emergencyCloseAllPaperTrades();
-
-  return {
-    message: "Emergency kill switch activated",
-    killSwitchActive: true,
-    ordersDisabled: true,
-    stoppedStrategies,
-    closedPaperPositions: closedTrades,
-  };
+async function activateKillSwitch(input = {}) {
+  const { activate } = require("./killSwitch.service");
+  return activate(input);
 }
 
 module.exports = {

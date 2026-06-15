@@ -39,7 +39,7 @@ exports.config = async (req, res) => {
 
 exports.killSwitch = async (req, res) => {
   try {
-    res.json({ success: true, data: await activateKillSwitch() });
+    res.json({ success: true, data: await activateKillSwitch(req.body) });
   } catch (error) {
     sendRiskEngineError(res, error);
   }
@@ -50,7 +50,7 @@ exports.unlock = async (req, res) => {
     res.json({
       success: true,
       message: "Risk engine unlocked",
-      data: await unlockRiskEngine(),
+      data: await unlockRiskEngine(req.body),
     });
   } catch (error) {
     sendRiskEngineError(res, error);
