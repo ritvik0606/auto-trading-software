@@ -361,6 +361,20 @@ CREATE TABLE IF NOT EXISTS ai_generated_strategies (
 CREATE INDEX IF NOT EXISTS ai_generated_strategies_score_index
 ON ai_generated_strategies (score DESC, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS broker_failover_logs (
+    id SERIAL PRIMARY KEY,
+    primary_broker VARCHAR(50) NOT NULL,
+    secondary_broker VARCHAR(50) NOT NULL,
+    failure_reason TEXT NOT NULL,
+    switch_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    recovery_time TIMESTAMP,
+    status VARCHAR(30) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS broker_failover_logs_created_index
+ON broker_failover_logs (created_at DESC, id DESC);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',
