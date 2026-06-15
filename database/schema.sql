@@ -435,6 +435,50 @@ ON trade_copier_logs (group_id, copied_at DESC);
 CREATE INDEX IF NOT EXISTS paper_trades_copier_master_index
 ON paper_trades (copier_master_trade_id, copier_follower_id);
 
+CREATE TABLE IF NOT EXISTS mobile_sessions (
+    id SERIAL PRIMARY KEY,
+    device_name VARCHAR(100) NOT NULL,
+    device_id VARCHAR(150) NOT NULL UNIQUE,
+    last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK (
+        status IN ('ACTIVE', 'INACTIVE')
+    ),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS mobile_notifications (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    read_status VARCHAR(20) NOT NULL DEFAULT 'UNREAD' CHECK (
+        read_status IN ('READ', 'UNREAD')
+    ),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS mobile_commands (
+    id SERIAL PRIMARY KEY,
+    command_name VARCHAR(50) NOT NULL,
+    command_data JSONB NOT NULL DEFAULT '{}'::JSONB,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (
+        status IN ('PENDING', 'EXECUTED', 'FAILED')
+    ),
+    result_data JSONB,
+    error_message TEXT,
+    executed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS mobile_sessions_status_index
+ON mobile_sessions (status, last_seen DESC);
+
+CREATE INDEX IF NOT EXISTS mobile_notifications_created_index
+ON mobile_notifications (created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS mobile_commands_created_index
+ON mobile_commands (created_at DESC, id DESC);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',

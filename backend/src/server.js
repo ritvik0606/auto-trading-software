@@ -34,6 +34,7 @@ const aiStrategyGeneratorRoutes = require(
 );
 const brokerFailoverRoutes = require("./routes/brokerFailover.routes");
 const tradeCopierRoutes = require("./routes/tradeCopier.routes");
+const mobileControlRoutes = require("./routes/mobileControl.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -61,6 +62,7 @@ app.use("/api/multi-strategy", multiStrategyRoutes);
 app.use("/api/ai-strategy", aiStrategyGeneratorRoutes);
 app.use("/api/broker-failover", brokerFailoverRoutes);
 app.use("/api/trade-copier", tradeCopierRoutes);
+app.use("/api/mobile", mobileControlRoutes);
 
 app.get("/", (req, res) => {
   res.send("Auto Trading Backend running");
