@@ -1,0 +1,181 @@
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role VARCHAR(30) DEFAULT 'admin',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS risk_settings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    capital NUMERIC(12,2) DEFAULT 100000,
+    risk_per_trade_percent NUMERIC(5,2) DEFAULT 1,
+    max_daily_loss NUMERIC(12,2) DEFAULT 2000,
+    daily_loss_limit_percent NUMERIC(5,2) DEFAULT 2,
+    daily_profit_lock_percent NUMERIC(5,2) DEFAULT 4,
+    max_trades_per_day INTEGER DEFAULT 5,
+    max_open_positions INTEGER DEFAULT 2,
+    auto_squareoff_time TIME DEFAULT '15:15:00',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE risk_settings
+ADD COLUMN IF NOT EXISTS max_daily_loss NUMERIC(12,2) DEFAULT 2000;
+
+ALTER TABLE risk_settings
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS strategies (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS trades (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    symbol VARCHAR(100) NOT NULL,
+    instrument_type VARCHAR(50),
+    side VARCHAR(10),
+    quantity INTEGER,
+    entry_price NUMERIC(12,2),
+    exit_price NUMERIC(12,2),
+    stop_loss NUMERIC(12,2),
+    target NUMERIC(12,2),
+    pnl NUMERIC(12,2),
+    status VARCHAR(30) DEFAULT 'OPEN',
+    entry_reason TEXT,
+    exit_reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    exited_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS watchlists (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(50) NOT NULL,
+    exchange VARCHAR(20) DEFAULT 'NSE',
+    symbol_token VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS watchlists_symbol_exchange_unique
+ON watchlists (UPPER(symbol), UPPER(exchange));
+
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(50) NOT NULL,
+    exchange VARCHAR(20) DEFAULT 'NSE',
+    trade_type VARCHAR(10) NOT NULL,
+    entry_price NUMERIC(12,2) NOT NULL,
+    quantity INTEGER NOT NULL,
+    stop_loss NUMERIC(12,2),
+    target_price NUMERIC(12,2),
+    status VARCHAR(20) DEFAULT 'OPEN',
+    exit_price NUMERIC(12,2),
+    pnl NUMERIC(12,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    closed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS positions (
+    id SERIAL PRIMARY KEY,
+    trade_id INTEGER REFERENCES paper_trades(id),
+    symbol VARCHAR(50),
+    exchange VARCHAR(20),
+    side VARCHAR(10),
+    quantity INTEGER,
+    average_price NUMERIC(12,2),
+    current_price NUMERIC(12,2),
+    unrealized_pnl NUMERIC(12,2) DEFAULT 0,
+    realized_pnl NUMERIC(12,2) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'OPEN',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS positions_trade_id_unique
+ON positions (trade_id);
+
+INSERT INTO positions (
+    trade_id,
+    symbol,
+    exchange,
+    side,
+    quantity,
+    average_price,
+    current_price,
+    unrealized_pnl,
+    realized_pnl,
+    status,
+    created_at
+)
+SELECT
+    id,
+    symbol,
+    exchange,
+    trade_type,
+    quantity,
+    entry_price,
+    COALESCE(exit_price, entry_price),
+    0,
+    COALESCE(pnl, 0),
+    status,
+    created_at
+FROM paper_trades
+ON CONFLICT (trade_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS trade_journal (
+    id SERIAL PRIMARY KEY,
+    trade_id INTEGER REFERENCES paper_trades(id),
+    symbol VARCHAR(50),
+    side VARCHAR(10),
+    entry_price NUMERIC(12,2),
+    exit_price NUMERIC(12,2),
+    quantity INTEGER,
+    pnl NUMERIC(12,2),
+    result VARCHAR(20),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trade_journal_trade_id_unique
+ON trade_journal (trade_id);
+
+INSERT INTO trade_journal (
+    trade_id,
+    symbol,
+    side,
+    entry_price,
+    exit_price,
+    quantity,
+    pnl,
+    result,
+    created_at
+)
+SELECT
+    id,
+    symbol,
+    trade_type,
+    entry_price,
+    exit_price,
+    quantity,
+    pnl,
+    CASE
+        WHEN pnl > 0 THEN 'WIN'
+        WHEN pnl < 0 THEN 'LOSS'
+        ELSE 'BREAKEVEN'
+    END,
+    COALESCE(closed_at, created_at)
+FROM paper_trades
+WHERE status = 'CLOSED'
+ON CONFLICT (trade_id) DO NOTHING;
+
+INSERT INTO strategies (name, description, is_active)
+VALUES (
+    'EMA VWAP Breakout Strategy',
+    '20 EMA > 50 EMA, price above VWAP, breakout confirmation, volume confirmation.',
+    true
+);
