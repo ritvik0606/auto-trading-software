@@ -301,6 +301,49 @@ REFERENCES multi_strategies(id);
 CREATE INDEX IF NOT EXISTS paper_trades_multi_strategy_index
 ON paper_trades (multi_strategy_id);
 
+CREATE TABLE IF NOT EXISTS backtest_runs (
+    id SERIAL PRIMARY KEY,
+    strategy_name VARCHAR(100) NOT NULL,
+    symbol VARCHAR(50) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    total_trades INTEGER NOT NULL,
+    winning_trades INTEGER NOT NULL,
+    losing_trades INTEGER NOT NULL,
+    win_rate NUMERIC(6,2) NOT NULL,
+    net_profit NUMERIC(14,2) NOT NULL,
+    profit_factor NUMERIC(12,4),
+    max_drawdown NUMERIC(14,2) NOT NULL,
+    sharpe_ratio NUMERIC(12,4),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (start_date <= end_date)
+);
+
+CREATE TABLE IF NOT EXISTS backtest_run_trades (
+    id SERIAL PRIMARY KEY,
+    backtest_run_id INTEGER NOT NULL REFERENCES backtest_runs(id)
+        ON DELETE CASCADE,
+    trade_sequence INTEGER NOT NULL,
+    source_paper_trade_id INTEGER REFERENCES paper_trades(id)
+        ON DELETE SET NULL,
+    symbol VARCHAR(50) NOT NULL,
+    side VARCHAR(10) NOT NULL,
+    entry_price NUMERIC(14,2) NOT NULL,
+    exit_price NUMERIC(14,2) NOT NULL,
+    quantity INTEGER NOT NULL,
+    pnl NUMERIC(14,2) NOT NULL,
+    entry_time TIMESTAMP NOT NULL,
+    exit_time TIMESTAMP NOT NULL,
+    UNIQUE (backtest_run_id, trade_sequence)
+);
+
+CREATE INDEX IF NOT EXISTS backtest_runs_history_index
+ON backtest_runs (created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS backtest_run_trades_run_index
+ON backtest_run_trades (backtest_run_id, trade_sequence);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',

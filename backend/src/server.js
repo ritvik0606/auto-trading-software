@@ -28,6 +28,7 @@ const performanceRoutes = require("./routes/performance.routes");
 const aiInsightsRoutes = require("./routes/aiInsights.routes");
 const optimizerRoutes = require("./routes/optimizer.routes");
 const multiStrategyRoutes = require("./routes/multiStrategy.routes");
+const backtestingLabRoutes = require("./routes/backtestingLab.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -40,6 +41,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/paper-trade", paperTradeRoutes);
 app.use("/api/positions", positionRoutes);
 app.use("/api/journal", journalRoutes);
+app.use("/api/backtest", backtestingLabRoutes);
 app.use("/api/backtest", backtestRoutes);
 app.use("/api/strategy", strategyRoutes);
 app.use("/api/orders", orderRoutes);
