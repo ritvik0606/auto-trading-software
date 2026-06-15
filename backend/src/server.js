@@ -26,6 +26,7 @@ const riskDashboardRoutes = require("./routes/riskDashboard.routes");
 const executionRoutes = require("./routes/execution.routes");
 const performanceRoutes = require("./routes/performance.routes");
 const aiInsightsRoutes = require("./routes/aiInsights.routes");
+const optimizerRoutes = require("./routes/optimizer.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -47,6 +48,7 @@ app.use("/api/alerts", alertsRoutes);
 app.use("/api/execution", executionRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/ai-insights", aiInsightsRoutes);
+app.use("/api/optimizer", optimizerRoutes);
 
 app.get("/", (req, res) => {
   res.send("Auto Trading Backend running");

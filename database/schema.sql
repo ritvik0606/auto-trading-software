@@ -257,6 +257,23 @@ CREATE TABLE IF NOT EXISTS risk_rules (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS strategy_optimizations (
+    id SERIAL PRIMARY KEY,
+    strategy_name VARCHAR(100) NOT NULL,
+    parameter_set JSONB NOT NULL,
+    trades_analyzed INTEGER NOT NULL,
+    win_rate NUMERIC(6,2) NOT NULL,
+    profit_factor NUMERIC(12,4),
+    avg_profit NUMERIC(14,2) NOT NULL,
+    avg_loss NUMERIC(14,2) NOT NULL,
+    max_drawdown NUMERIC(14,2) NOT NULL,
+    score NUMERIC(6,2) NOT NULL CHECK (score >= 0 AND score <= 100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS strategy_optimizations_score_index
+ON strategy_optimizations (score DESC, created_at DESC);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',
