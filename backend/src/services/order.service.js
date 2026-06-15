@@ -102,6 +102,10 @@ function mapOrder(row) {
 }
 
 async function saveBlockedOrder(order, mode, reason) {
+  const {
+    ensureSchema: ensureExecutionAnalyticsSchema,
+  } = require("./executionAnalytics.service");
+  await ensureExecutionAnalyticsSchema();
   const result = await pool.query(
     `INSERT INTO orders (
        symbol,
@@ -112,9 +116,18 @@ async function saveBlockedOrder(order, mode, reason) {
        price,
        status,
        mode,
-       reason
+       reason,
+       expected_price,
+       filled_quantity,
+       broker_name,
+       submitted_at,
+       rejected_at,
+       last_status_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, 'BLOCKED', $7, $8)
+     VALUES (
+       $1, $2, $3, $4, $5, $6, 'BLOCKED', $7, $8,
+       $6, 0, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+     )
      RETURNING *`,
     [
       order.symbol,
@@ -125,6 +138,7 @@ async function saveBlockedOrder(order, mode, reason) {
       order.price,
       mode,
       reason,
+      mode === "REAL" ? "ANGEL_ONE" : "SAFETY_LAYER",
     ]
   );
 

@@ -45,6 +45,10 @@ const portfolioAnalyticsRoutes = require(
   "./routes/portfolioAnalytics.routes"
 );
 const paperSimulatorRoutes = require("./routes/paperSimulator.routes");
+const {
+  analyticsRouter: executionAnalyticsRoutes,
+  reconciliationRouter: reconciliationRoutes,
+} = require("./routes/executionAnalytics.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -79,6 +83,8 @@ app.use("/api/hedging", hedgingRoutes);
 app.use("/api/strategy-generator", strategyGeneratorRoutes);
 app.use("/api/portfolio-analytics", portfolioAnalyticsRoutes);
 app.use("/api/paper-simulator", paperSimulatorRoutes);
+app.use("/api/execution-analytics", executionAnalyticsRoutes);
+app.use("/api/reconciliation", reconciliationRoutes);
 
 app.get("/", (req, res) => {
   res.send("Auto Trading Backend running");
