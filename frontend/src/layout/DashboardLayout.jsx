@@ -18,6 +18,7 @@ import {
 const drawerWidth = 252;
 const navigation = [
   ["Dashboard", "/dashboard", "DB"],
+  ["Market Watch", "/market-watch", "MW"],
   ["Portfolio", "/portfolio", "PF"],
   ["Positions", "/positions", "PS"],
   ["Orders", "/orders", "OR"],

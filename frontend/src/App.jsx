@@ -14,6 +14,7 @@ const RiskPage = lazy(() => import("./pages/RiskPage"));
 const PerformancePage = lazy(() => import("./pages/PerformancePage"));
 const AIInsightsPage = lazy(() => import("./pages/AIInsightsPage"));
 const MobileControlPage = lazy(() => import("./pages/MobileControlPage"));
+const MarketWatchPage = lazy(() => import("./pages/MarketWatchPage"));
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/market-watch" element={<MarketWatchPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/positions" element={<PositionsPage />} />
           <Route path="/orders" element={<OrdersPage />} />

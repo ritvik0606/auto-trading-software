@@ -15,7 +15,7 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = options.status || null;
     this.path = options.path || "";
-    this.isUnavailable = this.status === 502 || this.status === 503;
+    this.isUnavailable = !this.status || this.status >= 500;
   }
 }
 

@@ -7,6 +7,7 @@ import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
 import SectionCard from "../components/SectionCard";
 import OfflineNotice from "../components/OfflineNotice";
+import LivePortfolioPanel from "../components/LivePortfolioPanel";
 import { money, pnlTone } from "../utils/format";
 
 const fallbackSummary = {
@@ -20,7 +21,18 @@ const fallbackSummary = {
 
 export default function DashboardPage() {
   const { data, loading, error, reload } = useApi(async () => {
-    const [summary, broker, portfolio, risk, positions, performance] =
+    const [
+      summary,
+      broker,
+      portfolio,
+      risk,
+      positions,
+      performance,
+      nifty,
+      bankNifty,
+      reliance,
+      activeStrategies,
+    ] =
       await Promise.all([
         getDataSafe("/api/dashboard/summary", null),
         getDataSafe("/api/dashboard/broker-status", {
@@ -31,6 +43,16 @@ export default function DashboardPage() {
         getDataSafe("/api/risk/dashboard", null),
         getDataSafe("/api/positions/all", []),
         getDataSafe("/api/performance/summary", null),
+        getDataSafe("/api/market/nifty", { symbol: "NIFTY", ltp: null }),
+        getDataSafe("/api/market/banknifty", {
+          symbol: "BANKNIFTY",
+          ltp: null,
+        }),
+        getDataSafe("/api/market/quote/RELIANCE", {
+          symbol: "RELIANCE",
+          ltp: null,
+        }),
+        getDataSafe("/api/strategy/active", []),
       ]);
     const openPositions = Array.isArray(positions.data)
       ? positions.data.filter((position) => position.status === "OPEN").length
@@ -64,20 +86,35 @@ export default function DashboardPage() {
     return {
       summary: resolvedSummary,
       broker: broker.data,
+      market: {
+        nifty: nifty.data,
+        bankNifty: bankNifty.data,
+        reliance: reliance.data,
+      },
+      activeStrategies: activeStrategies.data,
       brokerUnavailable: broker.unavailable,
+      marketUnavailable:
+        nifty.unavailable ||
+        bankNifty.unavailable ||
+        reliance.unavailable,
       dataUnavailable:
         summary.unavailable ||
         portfolio.unavailable ||
         risk.unavailable ||
         positions.unavailable ||
-        performance.unavailable,
+        performance.unavailable ||
+        activeStrategies.unavailable,
       partialError: visibleError(
         summary,
         broker,
         portfolio,
         risk,
         positions,
-        performance
+        performance,
+        nifty,
+        bankNifty,
+        reliance,
+        activeStrategies
       ),
     };
   }, []);
@@ -86,7 +123,14 @@ export default function DashboardPage() {
 
   const summary = data?.summary || {};
   const connected = data?.broker?.connected;
-  const showOffline = !connected || data?.brokerUnavailable || data?.dataUnavailable;
+  const activeStrategies = Array.isArray(data?.activeStrategies)
+    ? data.activeStrategies
+    : [];
+  const showOffline =
+    !connected ||
+    data?.brokerUnavailable ||
+    data?.marketUnavailable ||
+    data?.dataUnavailable;
 
   return (
     <>
@@ -95,11 +139,14 @@ export default function DashboardPage() {
         title="Trading overview"
         description="A live operational view of capital, positions, and broker connectivity."
         action={
-          <Chip
-            label={connected ? "Angel One connected" : "Broker offline"}
-            color={connected ? "success" : "error"}
-            variant="outlined"
-          />
+          <Box display="flex" flexWrap="wrap" gap={1}>
+            <Chip label="PAPER TRADING" color="primary" variant="outlined" />
+            <Chip
+              label={connected ? "Angel One connected" : "Broker offline"}
+              color={connected ? "success" : "warning"}
+              variant="outlined"
+            />
+          </Box>
         }
       />
       <ErrorAlert message={error || data?.partialError} onRetry={reload} />
@@ -153,6 +200,67 @@ export default function DashboardPage() {
                 <Typography fontWeight={700} color={color}>{value}</Typography>
               </Box>
             ))}
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12 }}>
+          <LivePortfolioPanel />
+        </Grid>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <SectionCard title="Market watch" subtitle="Live Angel One LTP snapshot">
+            <Grid container spacing={1.5}>
+              {[
+                ["Nifty 50", data?.market?.nifty],
+                ["Bank Nifty", data?.market?.bankNifty],
+                ["Reliance", data?.market?.reliance],
+              ].map(([label, quote]) => (
+                <Grid key={label} size={{ xs: 12, sm: 4 }}>
+                  <StatCard
+                    label={label}
+                    value={quote?.ltp == null ? "Data unavailable" : money(quote.ltp)}
+                    tone={quote?.ltp == null ? "warning" : "primary"}
+                    badge={quote?.ltp == null ? "OFFLINE" : "LIVE"}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </SectionCard>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <SectionCard title="Strategy status" subtitle="Active EMA_RSI runners">
+            <Box display="flex" alignItems="baseline" gap={1.5} mb={2}>
+              <Typography variant="h3" fontWeight={800}>
+                {activeStrategies.length}
+              </Typography>
+              <Typography color="text.secondary">active strategies</Typography>
+            </Box>
+            {activeStrategies.length === 0 ? (
+              <Typography color="text.secondary">
+                No paper strategies are currently active.
+              </Typography>
+            ) : (
+              activeStrategies.slice(0, 4).map((strategy) => (
+                <Box
+                  key={strategy.symbol}
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  py={0.9}
+                >
+                  <Box>
+                    <Typography fontWeight={700}>{strategy.symbol}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {strategy.strategy} · {strategy.lastAction || "Waiting"}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    label={strategy.lastSignal || strategy.status}
+                    size="small"
+                    color="success"
+                    variant="outlined"
+                  />
+                </Box>
+              ))
+            )}
           </SectionCard>
         </Grid>
       </Grid>
