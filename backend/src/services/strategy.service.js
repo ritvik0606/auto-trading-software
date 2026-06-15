@@ -157,9 +157,26 @@ function getActiveStrategies() {
   return Array.from(activeStrategies.values()).map(serializeRunner);
 }
 
+function stopAllStrategies() {
+  const stopped = [];
+
+  for (const runner of activeStrategies.values()) {
+    clearInterval(runner.timer);
+    stopped.push({
+      symbol: runner.symbol,
+      strategy: runner.strategy,
+      status: "STOPPED",
+    });
+  }
+
+  activeStrategies.clear();
+  return stopped;
+}
+
 module.exports = {
   StrategyError,
   startStrategy,
   stopStrategy,
+  stopAllStrategies,
   getActiveStrategies,
 };

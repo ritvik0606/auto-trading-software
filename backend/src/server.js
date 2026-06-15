@@ -22,6 +22,7 @@ const orderRoutes = require("./routes/order.routes");
 const portfolioRoutes = require("./routes/portfolio.routes");
 const scannerRoutes = require("./routes/scanner.routes");
 const alertsRoutes = require("./routes/alerts.routes");
+const riskDashboardRoutes = require("./routes/riskDashboard.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -29,6 +30,7 @@ app.use("/api/market", marketRoutes);
 app.use("/api/watchlist", watchlistRoutes);
 app.use("/api/signal", signalRoutes);
 app.use("/api/risk", riskRoutes);
+app.use("/api/risk", riskDashboardRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/paper-trade", paperTradeRoutes);
 app.use("/api/positions", positionRoutes);

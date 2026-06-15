@@ -117,6 +117,13 @@ async function createPaperTrade(tradeType, input) {
     trade.exchange,
     trade.price
   );
+  const {
+    validateNewPaperTrade,
+  } = require("./riskDashboard.service");
+  await validateNewPaperTrade({
+    quantity: trade.quantity,
+    entryPrice,
+  });
   const client = await pool.connect();
 
   try {
@@ -243,9 +250,64 @@ async function exitPaperTrade(id, input = {}) {
   }
 }
 
+async function emergencyCloseAllPaperTrades() {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `SELECT
+         paper_trades.*,
+         COALESCE(positions.current_price, paper_trades.entry_price)
+           AS emergency_exit_price
+       FROM paper_trades
+       LEFT JOIN positions ON positions.trade_id = paper_trades.id
+       WHERE paper_trades.status = 'OPEN'
+       FOR UPDATE OF paper_trades`
+    );
+    const closedTrades = [];
+
+    for (const trade of result.rows) {
+      const exitPrice = Number(trade.emergency_exit_price);
+      const entryPrice = Number(trade.entry_price);
+      const direction = trade.trade_type === "BUY" ? 1 : -1;
+      const pnl = Number(
+        (
+          (exitPrice - entryPrice) *
+          trade.quantity *
+          direction
+        ).toFixed(2)
+      );
+      const update = await client.query(
+        `UPDATE paper_trades
+         SET status = 'CLOSED',
+             exit_price = $1,
+             pnl = $2,
+             closed_at = CURRENT_TIMESTAMP
+         WHERE id = $3
+         RETURNING *`,
+        [exitPrice, pnl, trade.id]
+      );
+
+      await closePositionForTrade(client, trade.id, exitPrice, pnl);
+      await createJournalForTrade(client, update.rows[0]);
+      closedTrades.push(mapPaperTrade(update.rows[0]));
+    }
+
+    await client.query("COMMIT");
+    return closedTrades;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   PaperTradeError,
   createPaperTrade,
   getPaperTrades,
   exitPaperTrade,
+  emergencyCloseAllPaperTrades,
 };

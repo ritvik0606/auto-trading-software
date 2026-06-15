@@ -223,6 +223,25 @@ CREATE TABLE IF NOT EXISTS alerts (
 CREATE INDEX IF NOT EXISTS alerts_status_type_index
 ON alerts (status, alert_type);
 
+CREATE TABLE IF NOT EXISTS risk_rules (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    daily_loss_lock BOOLEAN NOT NULL DEFAULT TRUE,
+    max_position_size INTEGER NOT NULL DEFAULT 1000 CHECK (
+        max_position_size > 0
+    ),
+    max_capital_allocation_per_trade NUMERIC(5,2) NOT NULL DEFAULT 20 CHECK (
+        max_capital_allocation_per_trade > 0
+        AND max_capital_allocation_per_trade <= 100
+    ),
+    max_open_positions INTEGER NOT NULL DEFAULT 5 CHECK (
+        max_open_positions > 0
+    ),
+    kill_switch_active BOOLEAN NOT NULL DEFAULT FALSE,
+    orders_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',

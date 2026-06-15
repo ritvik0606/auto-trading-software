@@ -140,6 +140,17 @@ async function placeAngelOrderPlaceholder() {
 
 async function placeOrder(input) {
   const order = normalizeOrderInput(input);
+  const {
+    areNewOrdersDisabled,
+  } = require("./riskDashboard.service");
+
+  if (await areNewOrdersDisabled()) {
+    const message = "Orders disabled by emergency kill switch.";
+    return {
+      message,
+      order: await saveBlockedOrder(order, "PAPER", message),
+    };
+  }
 
   if (!areRealOrdersEnabled()) {
     return {
