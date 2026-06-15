@@ -188,6 +188,41 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS alerts (
+    id SERIAL PRIMARY KEY,
+    alert_type VARCHAR(30) NOT NULL CHECK (
+        alert_type IN (
+            'PRICE_ABOVE',
+            'PRICE_BELOW',
+            'PROFIT_TARGET',
+            'LOSS_LIMIT'
+        )
+    ),
+    symbol VARCHAR(50),
+    exchange VARCHAR(20),
+    target_value NUMERIC(14,2) NOT NULL CHECK (target_value > 0),
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK (
+        status IN ('ACTIVE', 'TRIGGERED')
+    ),
+    triggered_value NUMERIC(14,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    triggered_at TIMESTAMP,
+    CHECK (
+        (
+            alert_type IN ('PRICE_ABOVE', 'PRICE_BELOW')
+            AND symbol IS NOT NULL
+            AND exchange IS NOT NULL
+        )
+        OR (
+            alert_type IN ('PROFIT_TARGET', 'LOSS_LIMIT')
+            AND symbol IS NULL
+        )
+    )
+);
+
+CREATE INDEX IF NOT EXISTS alerts_status_type_index
+ON alerts (status, alert_type);
+
 INSERT INTO strategies (name, description, is_active)
 VALUES (
     'EMA VWAP Breakout Strategy',

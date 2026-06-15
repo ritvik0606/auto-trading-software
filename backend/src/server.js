@@ -20,6 +20,8 @@ const backtestRoutes = require("./routes/backtest.routes");
 const strategyRoutes = require("./routes/strategy.routes");
 const orderRoutes = require("./routes/order.routes");
 const portfolioRoutes = require("./routes/portfolio.routes");
+const scannerRoutes = require("./routes/scanner.routes");
+const alertsRoutes = require("./routes/alerts.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -35,6 +37,8 @@ app.use("/api/backtest", backtestRoutes);
 app.use("/api/strategy", strategyRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/portfolio", portfolioRoutes);
+app.use("/api/scanner", scannerRoutes);
+app.use("/api/alerts", alertsRoutes);
 
 app.get("/", (req, res) => {
   res.send("Auto Trading Backend running");
