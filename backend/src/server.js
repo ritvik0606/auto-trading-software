@@ -37,6 +37,7 @@ const tradeCopierRoutes = require("./routes/tradeCopier.routes");
 const mobileControlRoutes = require("./routes/mobileControl.routes");
 const autoTradeRoutes = require("./routes/autoTrade.routes");
 const riskEngineRoutes = require("./routes/riskEngine.routes");
+const hedgingRoutes = require("./routes/hedging.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -67,6 +68,7 @@ app.use("/api/trade-copier", tradeCopierRoutes);
 app.use("/api/mobile", mobileControlRoutes);
 app.use("/api/auto-trade", autoTradeRoutes);
 app.use("/api/risk-engine", riskEngineRoutes);
+app.use("/api/hedging", hedgingRoutes);
 
 app.get("/", (req, res) => {
   res.send("Auto Trading Backend running");

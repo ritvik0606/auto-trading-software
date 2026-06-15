@@ -51,6 +51,9 @@ const MultiStrategyEnginePage = lazy(
 );
 const AutoTradingPage = lazy(() => import("./pages/AutoTradingPage"));
 const RiskEnginePage = lazy(() => import("./pages/RiskEnginePage"));
+const PortfolioHedgingPage = lazy(
+  () => import("./pages/PortfolioHedgingPage")
+);
 
 export default function App() {
   return (
@@ -86,6 +89,7 @@ export default function App() {
             <Route path="/multi-chart" element={<MultiChartDashboardPage />} />
             <Route path="/execution-analytics" element={<ExecutionAnalyticsPage />} />
             <Route path="/portfolio-analytics" element={<PortfolioAnalyticsPage />} />
+            <Route path="/portfolio-hedging" element={<PortfolioHedgingPage />} />
             <Route path="/daily-pnl" element={<DailyPnLMonitorPage />} />
             <Route path="/ai-insights" element={<AIInsightsPage />} />
             <Route path="/mobile" element={<MobileControlPage />} />

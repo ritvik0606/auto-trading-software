@@ -58,6 +58,7 @@ const navigationGroups = [
       ["Holdings", "/holdings", "HD"],
       ["Funds", "/funds", "FD"],
       ["Portfolio Analytics", "/portfolio-analytics", "PA"],
+      ["Portfolio Hedging", "/portfolio-hedging", "PH"],
     ],
   },
   {
