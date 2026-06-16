@@ -156,7 +156,18 @@ async function addStrategy(input) {
     ]
   );
 
-  return mapStrategy(result.rows[0]);
+  const savedStrategy = mapStrategy(result.rows[0]);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "STRATEGY",
+    action: "MULTI_STRATEGY_ADDED",
+    severity: "INFO",
+    entityType: "MULTI_STRATEGY",
+    entityId: savedStrategy.id,
+    message: "Multi-strategy instance added",
+    metadata: savedStrategy,
+  });
+  return savedStrategy;
 }
 
 async function getUsage(strategyId) {
@@ -337,7 +348,18 @@ async function startStrategy(id) {
     await client.query("COMMIT");
     createRunner(result.rows[0]);
 
-    return mapStrategy(result.rows[0]);
+    const strategy = mapStrategy(result.rows[0]);
+    const { safeRecordAudit } = require("./auditTrail.service");
+    await safeRecordAudit({
+      category: "STRATEGY",
+      action: "MULTI_STRATEGY_STARTED",
+      severity: "INFO",
+      entityType: "MULTI_STRATEGY",
+      entityId: strategy.id,
+      message: `${strategy.strategyName} started for ${strategy.symbol}`,
+      metadata: strategy,
+    });
+    return strategy;
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.code === "23505") {
@@ -378,7 +400,18 @@ async function setStrategyStatus(id, status) {
     [status, strategyId]
   );
 
-  return mapStrategy(result.rows[0]);
+  const strategy = mapStrategy(result.rows[0]);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "STRATEGY",
+    action: `MULTI_STRATEGY_${status}`,
+    severity: status === "STOPPED" ? "WARNING" : "INFO",
+    entityType: "MULTI_STRATEGY",
+    entityId: strategy.id,
+    message: `Multi-strategy changed to ${status}`,
+    metadata: strategy,
+  });
+  return strategy;
 }
 
 async function pauseStrategy(id) {
@@ -408,7 +441,16 @@ async function stopAllStrategies() {
      WHERE status IN ('ACTIVE', 'PAUSED')
      RETURNING *`
   );
-  return result.rows.map(mapStrategy);
+  const stopped = result.rows.map(mapStrategy);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "STRATEGY",
+    action: "ALL_MULTI_STRATEGIES_STOPPED",
+    severity: "WARNING",
+    message: "All multi-strategy runners stopped",
+    metadata: { stoppedCount: stopped.length },
+  });
+  return stopped;
 }
 
 async function getStrategies(activeOnly = false) {

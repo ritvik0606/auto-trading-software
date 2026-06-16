@@ -136,7 +136,18 @@ async function startStrategy(input) {
   }, EXECUTION_INTERVAL_MS);
   runner.timer.unref();
 
-  return serializeRunner(runner);
+  const response = serializeRunner(runner);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "STRATEGY",
+    action: "STRATEGY_STARTED",
+    severity: "INFO",
+    entityType: "STRATEGY_RUNNER",
+    entityId: symbol,
+    message: `${strategy} strategy started for ${symbol}`,
+    metadata: response,
+  });
+  return response;
 }
 
 function stopStrategy(input) {
@@ -150,11 +161,22 @@ function stopStrategy(input) {
   clearInterval(runner.timer);
   activeStrategies.delete(symbol);
 
-  return {
+  const response = {
     symbol,
     strategy: runner.strategy,
     status: "STOPPED",
   };
+  const { safeRecordAudit } = require("./auditTrail.service");
+  safeRecordAudit({
+    category: "STRATEGY",
+    action: "STRATEGY_STOPPED",
+    severity: "INFO",
+    entityType: "STRATEGY_RUNNER",
+    entityId: symbol,
+    message: `${runner.strategy} strategy stopped for ${symbol}`,
+    metadata: response,
+  });
+  return response;
 }
 
 function getActiveStrategies() {

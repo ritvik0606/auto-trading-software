@@ -141,7 +141,18 @@ async function createRiskRules(input) {
     ]
   );
 
-  return mapRules(result.rows[0]);
+  const savedRules = mapRules(result.rows[0]);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "SETTINGS",
+    action: "RISK_RULES_CREATED",
+    severity: "WARNING",
+    entityType: "RISK_RULES",
+    entityId: 1,
+    message: "Risk dashboard rules created",
+    metadata: savedRules,
+  });
+  return savedRules;
 }
 
 async function updateRiskRules(input) {
@@ -174,7 +185,18 @@ async function updateRiskRules(input) {
     ]
   );
 
-  return mapRules(result.rows[0]);
+  const savedRules = mapRules(result.rows[0]);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "SETTINGS",
+    action: "RISK_RULES_UPDATED",
+    severity: "WARNING",
+    entityType: "RISK_RULES",
+    entityId: 1,
+    message: "Risk dashboard rules updated",
+    metadata: savedRules,
+  });
+  return savedRules;
 }
 
 async function getRiskMetrics() {

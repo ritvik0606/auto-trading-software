@@ -221,7 +221,18 @@ async function saveConfig(input) {
     "Risk engine configuration updated",
     config
   );
-  return mapConfig(result.rows[0]);
+  const saved = mapConfig(result.rows[0]);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "RISK",
+    action: "RISK_ENGINE_CONFIG_UPDATED",
+    severity: "WARNING",
+    entityType: "RISK_CONFIG",
+    entityId: 1,
+    message: "Risk engine configuration updated",
+    metadata: saved,
+  });
+  return saved;
 }
 
 function calculatePnlPath(rows, unrealizedPnL = 0) {
@@ -362,6 +373,16 @@ async function lockRiskEngine(breach) {
     breach.reason,
     { stoppedAutoTradeRunners: stoppedRunners.length }
   );
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "RISK",
+    action: breach.type,
+    severity: "ERROR",
+    entityType: "RISK_ENGINE",
+    entityId: 1,
+    message: breach.reason,
+    metadata: { stoppedAutoTradeRunners: stoppedRunners.length },
+  });
   return stoppedRunners;
 }
 

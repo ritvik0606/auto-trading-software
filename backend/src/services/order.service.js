@@ -142,7 +142,24 @@ async function saveBlockedOrder(order, mode, reason) {
     ]
   );
 
-  return mapOrder(result.rows[0]);
+  const saved = mapOrder(result.rows[0]);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "ORDER",
+    action: "ORDER_BLOCKED",
+    severity: "WARNING",
+    entityType: "ORDER",
+    entityId: saved.id,
+    message: reason,
+    metadata: {
+      symbol: saved.symbol,
+      side: saved.side,
+      quantity: saved.quantity,
+      orderType: saved.orderType,
+      mode: saved.mode,
+    },
+  });
+  return saved;
 }
 
 async function placeAngelOrderPlaceholder() {

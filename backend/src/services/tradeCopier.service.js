@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const { createPaperTrade } = require("./paperTrade.service");
+const { safeRecordAudit } = require("./auditTrail.service");
 
 const COPY_INTERVAL_MS = 30 * 1000;
 const groupRunners = new Map();
@@ -319,6 +320,23 @@ async function copyTradeForFollower(group, follower, masterTrade) {
           ]
         );
         await client.query("COMMIT");
+        await safeRecordAudit({
+          category: "ORDER",
+          action: "PAPER_TRADE_COPIED_CLOSED",
+          severity: "INFO",
+          entityType: "PAPER_TRADE",
+          entityId: copiedTrade.id,
+          actor: "TRADE_COPIER",
+          message: `Copied paper trade closed for ${copiedTrade.symbol}`,
+          metadata: {
+            groupId: group.id,
+            followerId: follower.id,
+            masterTradeId: masterTrade.id,
+            side: copiedTrade.trade_type,
+            quantity: copiedTrade.quantity,
+            pnl: copiedTrade.pnl,
+          },
+        });
         return {
           status: "SUCCESS",
           copiedTradeId: copiedTrade.id,
@@ -479,6 +497,23 @@ async function copyTradeForFollower(group, follower, masterTrade) {
       ]
     );
     await client.query("COMMIT");
+    await safeRecordAudit({
+      category: "ORDER",
+      action: "PAPER_TRADE_COPIED",
+      severity: "INFO",
+      entityType: "PAPER_TRADE",
+      entityId: copiedTrade.id,
+      actor: "TRADE_COPIER",
+      message: `Paper trade copied for ${copiedTrade.symbol}`,
+      metadata: {
+        groupId: group.id,
+        followerId: follower.id,
+        masterTradeId: masterTrade.id,
+        side: copiedTrade.trade_type,
+        quantity: copiedTrade.quantity,
+        status: copiedTrade.status,
+      },
+    });
 
     return {
       status: "SUCCESS",

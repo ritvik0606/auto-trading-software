@@ -456,10 +456,26 @@ async function openPosition(input) {
     await recordEquity(client);
     await client.query("COMMIT");
 
-    return {
+    const response = {
       order: mapOrder(orderResult.rows[0]),
       position: mapPosition(position),
     };
+    const { safeRecordAudit } = require("./auditTrail.service");
+    await safeRecordAudit({
+      category: "ORDER",
+      action: "SIMULATOR_POSITION_OPENED",
+      severity: "INFO",
+      entityType: "SIMULATOR_POSITION",
+      entityId: response.position.id,
+      message: `${response.position.side} simulator position opened`,
+      metadata: {
+        symbol: response.position.symbol,
+        quantity: response.position.quantity,
+        price: response.position.averagePrice,
+        strategyName: response.position.strategyName,
+      },
+    });
+    return response;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -574,10 +590,25 @@ async function closePosition(input) {
     await recordEquity(client);
     await client.query("COMMIT");
 
-    return {
+    const response = {
       order: mapOrder(orderResult.rows[0]),
       position: mapPosition(closedPosition.rows[0]),
     };
+    const { safeRecordAudit } = require("./auditTrail.service");
+    await safeRecordAudit({
+      category: "ORDER",
+      action: "SIMULATOR_POSITION_CLOSED",
+      severity: response.position.realizedPnl < 0 ? "WARNING" : "INFO",
+      entityType: "SIMULATOR_POSITION",
+      entityId: response.position.id,
+      message: "Simulator position closed",
+      metadata: {
+        symbol: response.position.symbol,
+        exitPrice: response.position.currentPrice,
+        pnl: response.position.realizedPnl,
+      },
+    });
+    return response;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -658,7 +689,18 @@ async function resetSimulator(input = {}) {
     );
     await recordEquity(client);
     await client.query("COMMIT");
-    return getAccount();
+    const account = await getAccount();
+    const { safeRecordAudit } = require("./auditTrail.service");
+    await safeRecordAudit({
+      category: "SETTINGS",
+      action: "PAPER_SIMULATOR_RESET",
+      severity: "WARNING",
+      entityType: "SIMULATOR_ACCOUNT",
+      entityId: 1,
+      message: "Paper simulator account reset",
+      metadata: { initialBalance },
+    });
+    return account;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

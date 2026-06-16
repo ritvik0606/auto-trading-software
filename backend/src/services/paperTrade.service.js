@@ -154,7 +154,23 @@ async function createPaperTrade(tradeType, input) {
 
     await createPositionForTrade(client, result.rows[0]);
     await client.query("COMMIT");
-    return mapPaperTrade(result.rows[0]);
+    const mapped = mapPaperTrade(result.rows[0]);
+    const { safeRecordAudit } = require("./auditTrail.service");
+    await safeRecordAudit({
+      category: "ORDER",
+      action: "PAPER_TRADE_OPENED",
+      severity: "INFO",
+      entityType: "PAPER_TRADE",
+      entityId: mapped.id,
+      message: `${mapped.tradeType} paper trade opened`,
+      metadata: {
+        symbol: mapped.symbol,
+        exchange: mapped.exchange,
+        quantity: mapped.quantity,
+        entryPrice: mapped.entryPrice,
+      },
+    });
+    return mapped;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -241,7 +257,22 @@ async function exitPaperTrade(id, input = {}) {
     );
     await createJournalForTrade(client, result.rows[0]);
     await client.query("COMMIT");
-    return mapPaperTrade(result.rows[0]);
+    const mapped = mapPaperTrade(result.rows[0]);
+    const { safeRecordAudit } = require("./auditTrail.service");
+    await safeRecordAudit({
+      category: "ORDER",
+      action: "PAPER_TRADE_CLOSED",
+      severity: mapped.pnl < 0 ? "WARNING" : "INFO",
+      entityType: "PAPER_TRADE",
+      entityId: mapped.id,
+      message: "Paper trade closed",
+      metadata: {
+        symbol: mapped.symbol,
+        exitPrice: mapped.exitPrice,
+        pnl: mapped.pnl,
+      },
+    });
+    return mapped;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

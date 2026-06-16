@@ -233,7 +233,18 @@ async function startAutoTrade(input) {
   );
   runner.timer.unref();
 
-  return serializeRunner(runner);
+  const response = serializeRunner(runner);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "STRATEGY",
+    action: "AUTO_TRADE_STARTED",
+    severity: "INFO",
+    entityType: "AUTO_TRADE_RUNNER",
+    entityId: runner.id,
+    message: `Auto-trade runner started for ${runner.symbol}`,
+    metadata: response,
+  });
+  return response;
 }
 
 function stopAutoTrade(input = {}) {
@@ -245,6 +256,14 @@ function stopAutoTrade(input = {}) {
       return { ...serializeRunner(runner), status: "STOPPED" };
     });
     runners.clear();
+    const { safeRecordAudit } = require("./auditTrail.service");
+    safeRecordAudit({
+      category: "STRATEGY",
+      action: "ALL_AUTO_TRADES_STOPPED",
+      severity: "WARNING",
+      message: "All auto-trade runners stopped",
+      metadata: { stoppedCount: stopped.length },
+    });
     return stopped;
   }
 
@@ -264,7 +283,18 @@ function stopAutoTrade(input = {}) {
 
   clearInterval(runner.timer);
   runners.delete(key);
-  return [{ ...serializeRunner(runner), status: "STOPPED" }];
+  const stopped = [{ ...serializeRunner(runner), status: "STOPPED" }];
+  const { safeRecordAudit } = require("./auditTrail.service");
+  safeRecordAudit({
+    category: "STRATEGY",
+    action: "AUTO_TRADE_STOPPED",
+    severity: "INFO",
+    entityType: "AUTO_TRADE_RUNNER",
+    entityId: runner.id,
+    message: `Auto-trade runner stopped for ${runner.symbol}`,
+    metadata: stopped[0],
+  });
+  return stopped;
 }
 
 function getRunners() {

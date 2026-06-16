@@ -110,6 +110,20 @@ async function createFailoverLog(reason, status = "ACTIVE") {
   if (status === "ACTIVE") {
     activeFailoverLogId = result.rows[0].id;
   }
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "BROKER",
+    action: `BROKER_FAILOVER_${status}`,
+    severity: status === "FAILED" ? "ERROR" : "WARNING",
+    entityType: "BROKER_FAILOVER",
+    entityId: result.rows[0].id,
+    message: reason,
+    metadata: {
+      primaryBroker: PRIMARY_BROKER,
+      secondaryBroker: SECONDARY_BROKER,
+      status,
+    },
+  });
   return result.rows[0];
 }
 
@@ -128,6 +142,18 @@ async function markRecovered(status = "RECOVERED") {
     [status, activeFailoverLogId]
   );
   activeFailoverLogId = null;
+  if (result.rows[0]) {
+    const { safeRecordAudit } = require("./auditTrail.service");
+    await safeRecordAudit({
+      category: "BROKER",
+      action: "BROKER_RECOVERED",
+      severity: "INFO",
+      entityType: "BROKER_FAILOVER",
+      entityId: result.rows[0].id,
+      message: `Primary broker recovery recorded as ${status}`,
+      metadata: { status },
+    });
+  }
   return result.rows[0] || null;
 }
 
@@ -142,6 +168,16 @@ async function switchAutomatically(targetBroker, reason) {
 
   activeBroker = targetBroker;
   lastFailedFailoverReason = null;
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "BROKER",
+    action: "BROKER_AUTO_SWITCH",
+    severity: "WARNING",
+    entityType: "BROKER",
+    entityId: targetBroker,
+    message: reason,
+    metadata: { previousBroker, activeBroker },
+  });
   return { previousBroker, activeBroker };
 }
 
@@ -361,7 +397,7 @@ async function manualSwitch(input = {}) {
     "MANUAL_OVERRIDE"
   );
 
-  return {
+  const response = {
     activeBroker,
     previousBroker,
     health,
@@ -369,6 +405,21 @@ async function manualSwitch(input = {}) {
     manualOverride,
     mode: "PAPER_ONLY",
   };
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "BROKER",
+    action: "BROKER_MANUAL_SWITCH",
+    severity: "WARNING",
+    entityType: "BROKER",
+    entityId: requestedBroker,
+    message: `Manual broker switch: ${previousBroker} -> ${requestedBroker}`,
+    metadata: {
+      previousBroker,
+      activeBroker,
+      forced: force && !health.healthy,
+    },
+  });
+  return response;
 }
 
 function formatBrokerMetrics(broker) {

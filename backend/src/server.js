@@ -50,6 +50,7 @@ const {
   reconciliationRouter: reconciliationRoutes,
 } = require("./routes/executionAnalytics.routes");
 const killSwitchRoutes = require("./routes/killSwitch.routes");
+const auditTrailRoutes = require("./routes/auditTrail.routes");
 
 app.use("/api/broker", brokerRoutes);
 app.use("/api/health", healthRoutes);
@@ -87,6 +88,7 @@ app.use("/api/paper-simulator", paperSimulatorRoutes);
 app.use("/api/execution-analytics", executionAnalyticsRoutes);
 app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/kill-switch", killSwitchRoutes);
+app.use("/api/audit-trail", auditTrailRoutes);
 
 app.get("/", (req, res) => {
   res.send("Auto Trading Backend running");

@@ -136,8 +136,24 @@ async function cancelPendingOrders() {
      WHERE UPPER(COALESCE(status, '')) IN (
        'PENDING', 'SUBMITTED', 'OPEN', 'PARTIAL'
      )
-     RETURNING id`
+     RETURNING id, symbol, side, quantity`
   );
+  const { safeRecordAudit } = require("./auditTrail.service");
+  for (const order of result.rows) {
+    await safeRecordAudit({
+      category: "ORDER",
+      action: "ORDER_CANCELLED",
+      severity: "WARNING",
+      entityType: "ORDER",
+      entityId: order.id,
+      message: "Pending order cancelled by master kill switch",
+      metadata: {
+        symbol: order.symbol,
+        side: order.side,
+        quantity: order.quantity,
+      },
+    });
+  }
   return result.rows.map((row) => row.id);
 }
 
@@ -191,6 +207,23 @@ async function recordHistory({
       JSON.stringify(metadata),
     ]
   );
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "KILL_SWITCH",
+    action,
+    severity: action === "ACTIVATED" ? "ERROR" : "WARNING",
+    entityType: "MASTER_KILL_SWITCH",
+    entityId: 1,
+    message: reason,
+    metadata: {
+      triggerType,
+      autoRecovery,
+      cancelledOrders,
+      stoppedStrategies,
+      broker,
+      ...metadata,
+    },
+  });
   return result.rows[0];
 }
 

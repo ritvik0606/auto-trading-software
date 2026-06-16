@@ -89,7 +89,18 @@ async function saveRiskSettings(input) {
     [maxDailyLoss, maxTradesPerDay, riskPerTradePercent]
   );
 
-  return mapSettings(result.rows[0]);
+  const settings = mapSettings(result.rows[0]);
+  const { safeRecordAudit } = require("./auditTrail.service");
+  await safeRecordAudit({
+    category: "SETTINGS",
+    action: "RISK_SETTINGS_UPDATED",
+    severity: "WARNING",
+    entityType: "RISK_SETTINGS",
+    entityId: settings.id,
+    message: "Risk settings updated",
+    metadata: settings,
+  });
+  return settings;
 }
 
 function calculatePositionSize(input, settings) {
