@@ -32,6 +32,35 @@ exports.banknifty = groupHandler("banknifty");
 exports.fno = groupHandler("fno");
 exports.custom = groupHandler("custom");
 
+exports.status = async (req, res) => {
+  try {
+    const summary = await getScannerSummary();
+
+    res.json({
+      success: true,
+      data: {
+        status: "READY",
+        ...summary,
+      },
+    });
+  } catch (error) {
+    sendScannerError(res, error);
+  }
+};
+
+exports.run = async (req, res) => {
+  const group = req.body?.group || "nifty50";
+
+  try {
+    res.json({
+      success: true,
+      data: await scanGroup(group),
+    });
+  } catch (error) {
+    sendScannerError(res, error);
+  }
+};
+
 exports.summary = async (req, res) => {
   try {
     res.json({
