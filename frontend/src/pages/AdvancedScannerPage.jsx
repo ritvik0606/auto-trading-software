@@ -6,7 +6,7 @@ import OfflineNotice from "../components/OfflineNotice";
 import PageHeader from "../components/PageHeader";
 import StatCard from "../components/StatCard";
 import DataTable from "../components/DataTable";
-import { money, percent } from "../utils/format";
+import { dateTime, money, number, percent } from "../utils/format";
 
 const groups = [
   ["nifty50", "Nifty 50"],
@@ -39,6 +39,7 @@ export default function AdvancedScannerPage() {
   };
   const items = result?.items || [];
   const available = items.filter((item) => !item.error);
+  const buySignals = items.filter((item) => item.signal === "BUY" || item.buySignal).length;
   const columns = [
     { key: "symbol", label: "Symbol" },
     {
@@ -51,9 +52,18 @@ export default function AdvancedScannerPage() {
       key: "changePercent",
       label: "Change",
       align: "right",
-      render: (row) => row.changePercent == null ? "--" : percent(row.changePercent),
+      render: (row) => (
+        row.changePercent == null
+          ? "--"
+          : `${row.change == null ? "" : `${money(row.change)} `}(${percent(row.changePercent)})`
+      ),
     },
-    { key: "volume", label: "Volume", align: "right" },
+    {
+      key: "volume",
+      label: "Volume",
+      align: "right",
+      render: (row) => row.volume == null ? "--" : number(row.volume, 0),
+    },
     {
       key: "trend",
       label: "Trend",
@@ -78,12 +88,22 @@ export default function AdvancedScannerPage() {
       render: (row) => (
         <Typography
           fontWeight={800}
-          color={row.buySignal ? "success.main" : row.sellSignal ? "error.main" : "text.secondary"}
+          color={
+            row.signal === "BUY" || row.buySignal
+              ? "success.main"
+              : row.signal === "SELL" || row.sellSignal
+                ? "error.main"
+                : "text.secondary"
+          }
         >
-          {row.buySignal ? "BUY" : row.sellSignal ? "SELL" : "HOLD"}
+          {row.signal || (row.buySignal ? "BUY" : row.sellSignal ? "SELL" : "HOLD")}
         </Typography>
       ),
     },
+    { key: "rsi", label: "RSI", align: "right", render: (row) => number(row.rsi) },
+    { key: "ema20", label: "EMA 20", align: "right", render: (row) => number(row.ema20) },
+    { key: "ema50", label: "EMA 50", align: "right", render: (row) => number(row.ema50) },
+    { key: "updatedAt", label: "Updated", render: (row) => dateTime(row.updatedAt) },
   ];
 
   return (
@@ -111,7 +131,7 @@ export default function AdvancedScannerPage() {
           </Grid>
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Symbols scanned" value={result?.count ?? 0} /></Grid>
-        <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Buy signals" value={items.filter((item) => item.buySignal).length} tone="success" /></Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Buy signals" value={buySignals} tone="success" /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatCard label="Available data" value={available.length} tone="secondary" /></Grid>
         <Grid size={{ xs: 12 }}>
           <DataTable columns={columns} rows={items} getRowId={(row) => row.symbol} emptyMessage="Run a scan to populate the terminal" />
