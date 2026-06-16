@@ -83,6 +83,7 @@ const navigationGroups = [
       ["Brokers", "/brokers", "BR"],
       ["Broker Failover", "/broker-failover", "BF"],
       ["Mobile Control", "/mobile", "MC"],
+      ["Audit Trail", "/audit-trail", "AU"],
     ],
   },
 ];

@@ -63,6 +63,7 @@ const StrategyGeneratorDashboardPage = lazy(
 const TradeCopierPage = lazy(() => import("./pages/TradeCopierPage"));
 const PaperSimulatorPage = lazy(() => import("./pages/PaperSimulatorPage"));
 const KillSwitchPage = lazy(() => import("./pages/KillSwitchPage"));
+const AuditTrailPage = lazy(() => import("./pages/AuditTrailPage"));
 
 export default function App() {
   return (
@@ -107,6 +108,7 @@ export default function App() {
             <Route path="/daily-pnl" element={<DailyPnLMonitorPage />} />
             <Route path="/ai-insights" element={<AIInsightsPage />} />
             <Route path="/mobile" element={<MobileControlPage />} />
+            <Route path="/audit-trail" element={<AuditTrailPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
